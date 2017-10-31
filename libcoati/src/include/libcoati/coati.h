@@ -28,7 +28,7 @@ typedef struct {
 typedef struct _context_t {
     /** @brief Pointer to the most recently started but not finished task */
     task_t *task;
-
+    struct _context_t *next_ctx;
 } context_t;
 
 extern context_t * volatile curctx;
@@ -53,7 +53,7 @@ extern context_t * volatile curctx;
  */
 #define TASK(idx, func) \
     void func(); \
-    __nv task_t TASK_SYM_NAME(func) = { func, (1UL << idx), idx, {0}, 0, 0, #func }; \
+    __nv task_t TASK_SYM_NAME(func) = { func, idx, #func }; \
 
 #define TASK_REF(func) &TASK_SYM_NAME(func)
 

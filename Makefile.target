@@ -1,0 +1,32 @@
+# This is the Makefile for using the Tapir toolchain to build an app.
+# Include it from a bld/tapir directory in your app (built with 'maker').
+# Modified from old Makefile used for alpaca toolchain (old file either written
+# by A. Colin or K. Maeng)
+
+include $(MAKER_ROOT)/Makefile.env
+
+LOCAL_CFLAGS += -DALPACA \
+                -DCOATI \
+
+COATI_LIB = $(COATI_ROOT)/LLVM/build/src/libCoatiPass.so
+
+%.coati.bc : %.bc
+	$(OPT) -debug -stats -load $(COATI_LIB) \
+	  -coati \
+	  -o $@ $<
+
+LINK_OBJECTS = $(OBJECTS:.o=.coati.bc)
+
+override DEPS += \
+	libcoati \
+
+#DEP_ROOT_libcoati = $(COATI_ROOT)/CoatiRuntime
+DEP_ROOT_libcoati = $(COATI_ROOT)
+override CLFAGS += $(LOCAL_CFLAGS) \
+
+$(info from coati $(MAKER_ROOT))
+include $(MAKER_ROOT)/Makefile.clang
+
+# do not remove any intermediate artifacts
+.SECONDARY:
+

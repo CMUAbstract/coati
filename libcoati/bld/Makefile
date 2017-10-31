@@ -1,4 +1,4 @@
-LIB = libchain
+LIB = libcoati
 
 OBJECTS = \
 	coati.o \
