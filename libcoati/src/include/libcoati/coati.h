@@ -17,13 +17,19 @@ typedef uint32_t task_mask_t;
 typedef uint16_t field_mask_t;
 typedef unsigned task_idx_t;
 
-extern void volatile *task_dirty_buf_src[];
-extern void volatile *task_dirty_buf_dst[];
-extern size_t volatile task_dirty_buf_size[];
+extern void *task_dirty_buf_src[];
+extern void *task_dirty_buf_dst[];
+extern size_t task_dirty_buf_size[];
+//extern void volatile *task_dirty_buf_src[];
+//extern void volatile *task_dirty_buf_dst[];
+//extern size_t volatile task_dirty_buf_size[];
 extern uint8_t task_dirty_buf[];
 extern void *task_commit_list_src[];
 extern void *task_commit_list_dst[];
 extern size_t task_commit_list_size[];
+
+extern uint16_t volatile num_tbe;
+extern uint16_t num_dtv;
 
 typedef struct {
     task_func_t *func;
@@ -130,10 +136,24 @@ int16_t write(void * addr, void * value, size_t size);
     *((type *)read(&x))
 
 /**
+ *  @brief returns the value stored in x after checking if its in the dirty buf
+ */
+#define READ_PTR(x,type) \
+    *((type *)read(x))
+
+/**
  * @brief writes a value to x and returns status value (0 for success, -1 for
  * failure)
  */
 #define WRITE(x,val,type) \
     write(&x,&val,sizeof(type))
+
+/**
+ * @brief writes a value to the address of x and returns status value (0 for
+ * success, -1 for failure
+ */
+#define WRITE_PTR(x,val,type) \
+    write(x,&val,sizeof(type))
+
 
 #endif // CHAIN_H

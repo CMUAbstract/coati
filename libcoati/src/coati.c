@@ -28,9 +28,12 @@ __nv context_t * volatile curctx = &context_0;
 __nv volatile unsigned _numBoots = 0;
 
 // task dirty buffer data
-void volatile * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
-void  volatile * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
-size_t volatile task_dirty_buf_size[NUM_DIRTY_ENTRIES];
+void * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
+void * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
+size_t task_dirty_buf_size[NUM_DIRTY_ENTRIES];
+//void volatile * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
+//void  volatile * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
+//size_t volatile task_dirty_buf_size[NUM_DIRTY_ENTRIES];
 __nv uint8_t task_dirty_buf[BUF_SIZE];
 
 __nv void * task_commit_list_src[NUM_DIRTY_ENTRIES];
@@ -53,10 +56,19 @@ static void * task_dirty_buf_alloc(void *, size_t);
  * @brief Function that copies data to dirty list
  */
 void commit_ph1() {
+    //printf("In commit_ph1 %i !\r\n",num_tbe);
     if(!num_tbe)
         return;
+    //printf("here!\r\n");
 
-    for(int i = 0; i < num_dtv; i++) {
+    for(int i = 0; i < num_tbe; i++) {
+        /*
+        printf("old, new: dst: %x %x\r\n", //dst %x %x, size %x %x\r\n",
+                //task_commit_list_src[i], task_dirty_buf_src[i]//,
+                task_commit_list_dst[i], task_dirty_buf_dst[i]//,
+                //task_commit_list_size[i], task_dirty_buf_size[i]
+                );
+        */
         task_commit_list_src[i] = task_dirty_buf_src[i];
         task_commit_list_dst[i] = task_dirty_buf_dst[i];
         task_commit_list_size[i] = task_dirty_buf_size[i];
@@ -69,8 +81,13 @@ void commit_ph1() {
  * @brief Function that copies data to main memory from the dirty list
  */
 void commit_ph2() {
-
+    // Copy all commit list entries
+    //printf("Num_dtv = %i \r\n",num_dtv);
     while(num_dtv > 0)  {
+      /*
+      printf("Copying from %x to %x \r\n",((uint16_t *)task_commit_list_dst[num_dtv -1]), 
+            (uint16_t) task_commit_list_src[num_dtv - 1]);
+      */
       memcpy( task_commit_list_src[num_dtv - 1],
               task_commit_list_dst[num_dtv - 1],
               task_commit_list_size[num_dtv - 1]
@@ -107,6 +124,7 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
         new_ptr = task_dirty_buf;
     }
     if(new_ptr + size > task_dirty_buf + BUF_SIZE) {
+        printf("%x + %i > %x + %i \r\n",new_ptr,size,task_dirty_buf,32);
         return NULL;
     }
     else {
@@ -114,6 +132,7 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
         task_dirty_buf_src[num_tbe - 1] = addr;
         task_dirty_buf_dst[num_tbe - 1] = new_ptr;
         task_dirty_buf_size[num_tbe - 1] = size;
+        printf("src: %x dst: %x size: %x \r\n",addr,new_ptr,size);
     }
     return (void *) new_ptr;
 }
@@ -165,6 +184,10 @@ int16_t write(void *addr, void * value, size_t size) {
 void task_prologue()
 {
     commit_ph2();
+
+    // Clear all task buf entries before starting new task
+    num_tbe = 0;
+
 }
 
 /**
