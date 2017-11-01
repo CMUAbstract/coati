@@ -20,7 +20,6 @@ typedef struct _void_type_t void_type_t;
 __nv context_t context_1 = {0};
 __nv context_t context_0 = {
     .task = TASK_REF(_entry_task),
-    .next_ctx = &context_1,
 };
 
 __nv context_t * volatile curctx = &context_0;
@@ -28,14 +27,136 @@ __nv context_t * volatile curctx = &context_0;
 // for internal instrumentation purposes
 __nv volatile unsigned _numBoots = 0;
 
+// task dirty buffer data
+void volatile * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
+void  volatile * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
+size_t volatile task_dirty_buf_size[NUM_DIRTY_ENTRIES];
+__nv uint8_t task_dirty_buf[BUF_SIZE];
+
+__nv void * task_commit_list_src[NUM_DIRTY_ENTRIES];
+__nv void * task_commit_list_dst[NUM_DIRTY_ENTRIES];
+__nv size_t task_commit_list_size[NUM_DIRTY_ENTRIES];
+
+// volatile number of task buffer entries that we want to clear on reboot
+volatile uint16_t num_tbe = 0;
+
+// nv count of the number of dirty global variables to be committed
+__nv uint16_t num_dtv = 0;
+
+// Bundle of functions internal to the library
+static void commit_ph2();
+static void commit_ph1();
+static int16_t find(void *);
+static void * task_dirty_buf_alloc(void *, size_t);
+
+/**
+ * @brief Function that copies data to dirty list
+ */
+void commit_ph1() {
+    if(!num_tbe)
+        return;
+
+    for(int i = 0; i < num_dtv; i++) {
+        task_commit_list_src[i] = task_dirty_buf_src[i];
+        task_commit_list_dst[i] = task_dirty_buf_dst[i];
+        task_commit_list_size[i] = task_dirty_buf_size[i];
+    }
+
+    num_dtv = num_tbe;
+
+}
+/**
+ * @brief Function that copies data to main memory from the dirty list
+ */
+void commit_ph2() {
+
+    while(num_dtv > 0)  {
+      memcpy( task_commit_list_src[num_dtv - 1],
+              task_commit_list_dst[num_dtv - 1],
+              task_commit_list_size[num_dtv - 1]
+            );
+      num_dtv--;
+    }
+}
+
+
+/*
+ * @brief returns the index into the buffers of where the data is located
+ */
+int16_t  find(void * addr) {
+    for(int i = 0; i < num_tbe; i++) {
+        if(addr == task_dirty_buf_src[i])
+            return i;
+    }
+    return -1;
+}
+
+/*
+ * @brief allocs space in buffer and returns a pointer to the spot, returns NULL
+ * if buf is out of space
+ */
+void * task_dirty_buf_alloc(void * addr, size_t size) {
+    uint16_t new_ptr;
+    new_ptr = (uint16_t) task_dirty_buf_dst[num_tbe] + task_dirty_buf_size[num_tbe];
+    if(new_ptr + size > task_dirty_buf + BUF_SIZE) {
+        return NULL;
+    }
+    else {
+        num_tbe++;
+        task_dirty_buf_src[num_tbe] = addr;
+        task_dirty_buf_dst[num_tbe] = new_ptr;
+        task_dirty_buf_size[num_tbe] = size;
+    }
+    return (void *) new_ptr;
+}
+
+/*
+ * @brief Returns a pointer to the value stored in the buffer a the src address
+ * provided or the value in main memory
+ */
+
+void * read(void * addr) {
+    int index;
+    index = find(addr);
+    if(index > -1) {
+        return task_dirty_buf_dst[index];
+    }
+    else {
+        return addr;
+    }
+}
+
+/*
+ * @brief writes data from value pointer to address' location in task buf,
+ * returns 0 if successful, -1 if allocation failed
+ */
+int16_t write(void *addr, void * value, size_t size) {
+    int index;
+    index = find(addr);
+    if(index > -1) {
+        memcpy(task_dirty_buf_dst[index], value, size);
+    }
+    else {
+        void * dst = task_dirty_buf_alloc(addr, size);
+        if(dst) {
+            memcpy(dst, value, size);
+        }
+        else {
+            // Error! we ran out of space
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
+
 /**
  * @brief Function to be invoked at the beginning of every task
  */
 void task_prologue()
 {
-    task_t *curtask = curctx->task;
-
-    // Add dirty buffer swap code here
+    commit_ph2();
 }
 
 /**
@@ -50,46 +171,16 @@ void transition_to(task_t *next_task)
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
 
-    // reset stack pointer
+    // Copy all of the variables into the dirty buffer
     // update current task pointer
-    // tick logical time
+    // reset stack pointer
     // jump to next task
 
-    // NOTE: the order of these does not seem to matter, a reboot
-    // at any point in this sequence seems to be harmless.
-    //
-    // NOTE: It might be a bit cleaner to reset the stack and
-    // set the current task pointer in the function *prologue* --
-    // would need compiler support for this.
-    //
-    // NOTE: It is harmless to increment the time even if we fail before
-    // transitioning to the next task. The reverse, i.e. failure to increment
-    // time while having transitioned to the task, would break the
-    // semantics of CHAN_IN (aka. sync), which should get the most recently
-    // updated value.
-    //
-    // NOTE: Storing two pointers (one to next and one to current context)
-    // does not seem acceptable, because the two would need to be kept
-    // consistent in the face of intermittence. But, could keep one pointer
-    // to current context and a pointer to next context inside the context
-    // structure. The only reason to do that is if it is more efficient --
-    // i.e. avoids XORing the index and getting the actual pointer.
+    commit_ph1();
 
-    // TODO: handle overflow of timestamp. Some very raw ideas:
-    //          * limit the age of values
-    //          * a maintainance task that fixes up stored timestamps
-    //          * extra bit to mark timestamps as pre/post overflow
-
-    // TODO: re-use the top-of-stack address used in entry point, instead
-    //       of hardcoding the address.
-    //
-    //       Probably need to write a custom entry point in asm, and
-    //       use it instead of the C runtime one.
-
-    next_ctx = curctx->next_ctx;
+    next_ctx = (curctx == &context_0 ? &context_1 : &context_0 );
     next_ctx->task = next_task;
 
-    next_ctx->next_ctx = curctx;
     curctx = next_ctx;
 
     task_prologue();
@@ -101,13 +192,6 @@ void transition_to(task_t *next_task)
         : [ntask] "r" (next_task->func)
     );
 
-    // Alternative:
-    // task-function prologue:
-    //     mov pc, curtask
-    //     mov #0x2400, sp
-    //
-    // transition_to(next_task->func):
-    //     br next_task
 }
 
 

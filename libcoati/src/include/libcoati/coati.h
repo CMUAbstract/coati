@@ -9,13 +9,21 @@
 #include "repeat.h"
 
 #define TASK_NAME_SIZE 32
-
+#define NUM_DIRTY_ENTRIES 16
+#define BUF_SIZE 32
 
 typedef void (task_func_t)(void);
 typedef uint32_t task_mask_t;
 typedef uint16_t field_mask_t;
 typedef unsigned task_idx_t;
 
+extern void volatile *task_dirty_buf_src[];
+extern void volatile *task_dirty_buf_dst[];
+extern size_t volatile task_dirty_buf_size[];
+extern uint8_t task_dirty_buf[];
+extern void *task_commit_list_src[];
+extern void *task_commit_list_dst[];
+extern size_t task_commit_list_size[];
 
 typedef struct {
     task_func_t *func;
@@ -28,7 +36,6 @@ typedef struct {
 typedef struct _context_t {
     /** @brief Pointer to the most recently started but not finished task */
     task_t *task;
-    struct _context_t *next_ctx;
 } context_t;
 
 extern context_t * volatile curctx;
@@ -106,9 +113,27 @@ void _init();
 
 void task_prologue();
 void transition_to(task_t *task);
+
+
 /** @brief Transfer control to the given task
  *  @param task     Name of the task function
  *  */
 #define TRANSITION_TO(task) transition_to(TASK_REF(task))
+
+void * read(void * addr);
+int16_t write(void * addr, void * value, size_t size);
+
+/**
+ *  @brief returns the value of x after finding it in dirty buf
+ */
+#define READ(x,type) \
+    *((type *)read(&x))
+
+/**
+ * @brief writes a value to x and returns status value (0 for success, -1 for
+ * failure)
+ */ 
+#define WRITE(x,val,type) \
+    write(&x,&val,sizeof(type)) 
 
 #endif // CHAIN_H
