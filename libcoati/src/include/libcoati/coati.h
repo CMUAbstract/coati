@@ -132,8 +132,8 @@ int16_t write(void * addr, void * value, size_t size);
 /**
  * @brief writes a value to x and returns status value (0 for success, -1 for
  * failure)
- */ 
+ */
 #define WRITE(x,val,type) \
-    write(&x,&val,sizeof(type)) 
+    write(&x,&val,sizeof(type))
 
 #endif // CHAIN_H

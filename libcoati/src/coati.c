@@ -84,9 +84,11 @@ void commit_ph2() {
  * @brief returns the index into the buffers of where the data is located
  */
 int16_t  find(void * addr) {
-    for(int i = 0; i < num_tbe; i++) {
-        if(addr == task_dirty_buf_src[i])
-            return i;
+    if(num_tbe) {
+      for(int i = 0; i < num_tbe; i++) {
+          if(addr == task_dirty_buf_src[i])
+              return i;
+      }
     }
     return -1;
 }
@@ -97,15 +99,21 @@ int16_t  find(void * addr) {
  */
 void * task_dirty_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
-    new_ptr = (uint16_t) task_dirty_buf_dst[num_tbe] + task_dirty_buf_size[num_tbe];
+    if(num_tbe) {
+        new_ptr = (uint16_t) task_dirty_buf_dst[num_tbe - 1] +
+        task_dirty_buf_size[num_tbe - 1];
+    }
+    else {
+        new_ptr = task_dirty_buf;
+    }
     if(new_ptr + size > task_dirty_buf + BUF_SIZE) {
         return NULL;
     }
     else {
         num_tbe++;
-        task_dirty_buf_src[num_tbe] = addr;
-        task_dirty_buf_dst[num_tbe] = new_ptr;
-        task_dirty_buf_size[num_tbe] = size;
+        task_dirty_buf_src[num_tbe - 1] = addr;
+        task_dirty_buf_dst[num_tbe - 1] = new_ptr;
+        task_dirty_buf_size[num_tbe - 1] = size;
     }
     return (void *) new_ptr;
 }
