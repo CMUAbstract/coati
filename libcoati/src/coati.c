@@ -124,7 +124,6 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
         new_ptr = task_dirty_buf;
     }
     if(new_ptr + size > task_dirty_buf + BUF_SIZE) {
-        printf("%x + %i > %x + %i \r\n",new_ptr,size,task_dirty_buf,32);
         return NULL;
     }
     else {
@@ -132,7 +131,6 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
         task_dirty_buf_src[num_tbe - 1] = addr;
         task_dirty_buf_dst[num_tbe - 1] = new_ptr;
         task_dirty_buf_size[num_tbe - 1] = size;
-        printf("src: %x dst: %x size: %x \r\n",addr,new_ptr,size);
     }
     return (void *) new_ptr;
 }

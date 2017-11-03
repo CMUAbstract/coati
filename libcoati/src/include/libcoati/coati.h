@@ -133,27 +133,43 @@ int16_t write(void * addr, void * value, size_t size);
  *  @brief returns the value of x after finding it in dirty buf
  */
 #define READ(x,type) \
-    *((type *)read(&x))
+    *((type *)read(&(x)))
 
 /**
  *  @brief returns the value stored in x after checking if its in the dirty buf
  */
-#define READ_PTR(x,type) \
-    *((type *)read(x))
+#define READ_PTR(x_ptr,type) \
+    *((type *)read(x_ptr))
+
 
 /**
  * @brief writes a value to x and returns status value (0 for success, -1 for
  * failure)
  */
 #define WRITE(x,val,type) \
-    write(&x,&val,sizeof(type))
+    write(&(x),&(val),sizeof(type))
 
 /**
  * @brief writes a value to the address of x and returns status value (0 for
  * success, -1 for failure
  */
-#define WRITE_PTR(x,val,type) \
-    write(x,&val,sizeof(type))
+#define WRITE_PTR(x_ptr,val,type) \
+    write((x_ptr),&(val),sizeof(type))
+
+/**
+ * @brief writes a value to the address of x_ptr from the value stored in val_ptr
+ */
+#define WRITE_PTR_PTR(x_ptr,val_ptr,type) \
+    write(x_ptr,val_ptr,sizeof(type))
+
+/**
+ * @brief declares a variable in a limited scope and passes that to write
+ */
+#define WRITE_VAL(x, val, type); \
+{   type _temp = val; \
+    write(&(x), &_temp, sizeof(type)); \
+}
+
 
 
 #endif // CHAIN_H
