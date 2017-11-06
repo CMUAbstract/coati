@@ -10,16 +10,12 @@
 
 #include "coati.h"
 
-/* Dummy types for offset calculations */
-struct _void_type_t {
-    void * x;
-};
-typedef struct _void_type_t void_type_t;
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
 __nv context_t context_0 = {
     .task = TASK_REF(_entry_task),
+    .extra_state = NULL
 };
 
 __nv context_t * volatile curctx = &context_0;
@@ -31,9 +27,6 @@ __nv volatile unsigned _numBoots = 0;
 void * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
 void * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
 size_t task_dirty_buf_size[NUM_DIRTY_ENTRIES];
-//void volatile * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
-//void  volatile * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
-//size_t volatile task_dirty_buf_size[NUM_DIRTY_ENTRIES];
 __nv uint8_t task_dirty_buf[BUF_SIZE];
 
 __nv void * task_commit_list_src[NUM_DIRTY_ENTRIES];
@@ -56,38 +49,25 @@ static void * task_dirty_buf_alloc(void *, size_t);
  * @brief Function that copies data to dirty list
  */
 void commit_ph1() {
-    //printf("In commit_ph1 %i !\r\n",num_tbe);
     if(!num_tbe)
         return;
-    //printf("here!\r\n");
 
     for(int i = 0; i < num_tbe; i++) {
-        /*
-        printf("old, new: dst: %x %x\r\n", //dst %x %x, size %x %x\r\n",
-                //task_commit_list_src[i], task_dirty_buf_src[i]//,
-                task_commit_list_dst[i], task_dirty_buf_dst[i]//,
-                //task_commit_list_size[i], task_dirty_buf_size[i]
-                );
-        */
         task_commit_list_src[i] = task_dirty_buf_src[i];
         task_commit_list_dst[i] = task_dirty_buf_dst[i];
         task_commit_list_size[i] = task_dirty_buf_size[i];
     }
 
     num_dtv = num_tbe;
-
 }
+
 /**
  * @brief Function that copies data to main memory from the dirty list
  */
 void commit_ph2() {
     // Copy all commit list entries
-    //printf("Num_dtv = %i \r\n",num_dtv);
     while(num_dtv > 0)  {
-      /*
-      printf("Copying from %x to %x \r\n",((uint16_t *)task_commit_list_dst[num_dtv -1]), 
-            (uint16_t) task_commit_list_src[num_dtv - 1]);
-      */
+      // Copy from dst in tsk buf to "home" for that variable
       memcpy( task_commit_list_src[num_dtv - 1],
               task_commit_list_dst[num_dtv - 1],
               task_commit_list_size[num_dtv - 1]
@@ -182,7 +162,10 @@ int16_t write(void *addr, void * value, size_t size) {
 void task_prologue()
 {
     commit_ph2();
-
+    // Now check if there's a commit here
+    if(((tx_state *)(curctx->extra_state))->tx_need_commit) {
+        tx_commit();
+    }
     // Clear all task buf entries before starting new task
     num_tbe = 0;
 
@@ -199,17 +182,30 @@ void transition_to(task_t *next_task)
 {
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
-
+    tx_state *new_tx_state;
+    tx_state *cur_tx_state =(tx_state *)(curctx->extra_state);
     // Copy all of the variables into the dirty buffer
+    // update the extra state objects
     // update current task pointer
     // reset stack pointer
     // jump to next task
 
-    commit_ph1();
+    if(cur_tx_state->in_tx) {
+        tcommit_ph1();
+    }
+    else {
+        commit_ph1();
+    }
 
-    next_ctx = (curctx == &context_0 ? &context_1 : &context_0 );
+    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+
+    new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
+    new_tx_state->in_tx = cur_tx_state->in_tx;
+    new_tx_state->tx_need_commit = cur_tx_state->tx_need_commit;
+
+    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
+
     next_ctx->task = next_task;
-
     curctx = next_ctx;
 
     task_prologue();

@@ -1,5 +1,5 @@
-#ifndef CHAIN_H
-#define CHAIN_H
+#ifndef COATI_H
+#define COATI_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -20,9 +20,6 @@ typedef unsigned task_idx_t;
 extern void *task_dirty_buf_src[];
 extern void *task_dirty_buf_dst[];
 extern size_t task_dirty_buf_size[];
-//extern void volatile *task_dirty_buf_src[];
-//extern void volatile *task_dirty_buf_dst[];
-//extern size_t volatile task_dirty_buf_size[];
 extern uint8_t task_dirty_buf[];
 extern void *task_commit_list_src[];
 extern void *task_commit_list_dst[];
@@ -42,6 +39,8 @@ typedef struct {
 typedef struct _context_t {
     /** @brief Pointer to the most recently started but not finished task */
     task_t *task;
+    /** @brief Pointer to the extra state we need to swap on context switch */
+    void * extra_state;
 } context_t;
 
 extern context_t * volatile curctx;
@@ -170,6 +169,13 @@ int16_t write(void * addr, void * value, size_t size);
     write(&(x), &_temp, sizeof(type)); \
 }
 
+/**
+ * @brief declares a var in a limited scope and passes that to the pointer
+ * specified
+ */
+#define WRITE_PTR_VAL(x_ptr, val, type); \
+{   type _temp = val; \
+    write(&(x), &_temp, sizeof(type)); \
+}
 
-
-#endif // CHAIN_H
+#endif // COATI_H
