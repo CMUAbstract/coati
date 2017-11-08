@@ -40,7 +40,7 @@ typedef struct _context_t {
     /** @brief Pointer to the most recently started but not finished task */
     task_t *task;
     /** @brief Pointer to the extra state we need to swap on context switch */
-    void * extra_state;
+    void *extra_state;
 } context_t;
 
 extern context_t * volatile curctx;
@@ -127,6 +127,7 @@ void transition_to(task_t *task);
 
 void * read(void * addr);
 int16_t write(void * addr, void * value, size_t size);
+int16_t find(void *);
 
 /**
  *  @brief returns the value of x after finding it in dirty buf

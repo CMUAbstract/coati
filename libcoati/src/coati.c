@@ -9,7 +9,7 @@
 #endif
 
 #include "coati.h"
-
+#include "tx.h"
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
@@ -42,7 +42,6 @@ __nv uint16_t num_dtv = 0;
 // Bundle of functions internal to the library
 static void commit_ph2();
 static void commit_ph1();
-static int16_t find(void *);
 static void * task_dirty_buf_alloc(void *, size_t);
 
 /**
@@ -163,7 +162,7 @@ void task_prologue()
 {
     commit_ph2();
     // Now check if there's a commit here
-    if(((tx_state *)(curctx->extra_state))->tx_need_commit) {
+    if(((tx_state *)curctx->extra_state)->tx_need_commit) {
         tx_commit();
     }
     // Clear all task buf entries before starting new task
@@ -201,7 +200,7 @@ void transition_to(task_t *next_task)
 
     new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
     new_tx_state->in_tx = cur_tx_state->in_tx;
-    new_tx_state->tx_need_commit = cur_tx_state->tx_need_commit;
+    new_tx_state->tx_need_commit = need_tx_commit;
 
     next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
 

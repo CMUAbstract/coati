@@ -9,6 +9,7 @@
 #endif
 
 #include "coati.h"
+#include "tx.h"
 
 __nv uint8_t tx_dirty_buf[BUF_SIZE];
 
@@ -18,6 +19,8 @@ __nv size_t tx_dirty_size[NUM_DIRTY_ENTRIES];
 
 // volatile number of tx buffer entries that we want to clear on reboot
 volatile uint16_t num_txbe = 0;
+// volatile flat that indicates need to commit transaction
+volatile uint8_t need_tx_commit = 0;
 
 // Pointers to state that'll get used by transactions library
 __nv tx_state state_1 = {0};
@@ -35,15 +38,16 @@ void tx_begin() {
     ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 1;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
+    need_tx_commit = 0;
     num_txbe = 0;
 }
 
 /*
  * @brief set flags for committing a tx
  */
-void tx_commit() {
-    ((tx_state *)(curctx->extra_state))->tx_need_commit = 1;
-} 
+void tx_end() {
+    need_tx_commit = 1;
+}
 
 /*
  * @brief returns the index into the tx buffers of where the data is located
@@ -88,7 +92,7 @@ void * tread(void * addr) {
         // Not in tsk buf, so check tx buf
         index = tfind(addr);
         if(index > -1) {
-            return tx_buf_dst[index];
+            return tx_dirty_dst[index];
         }
         // Not in tx buf either, so return main memory addr
         else {
@@ -119,16 +123,17 @@ void tcommit_ph1() {
         // hunt for addr in tx buf and return new dst if it's in there
         void *tx_dst = t_get_dst(task_dirty_buf_src[i]);
         if(!tx_dst) {
-            tx_dst = tx_dirty_buf_alloc(task_dirty_buf_src[i], size);
+            tx_dst = tx_dirty_buf_alloc(task_dirty_buf_src[i],
+                      task_dirty_buf_size[i]);
             if(!tx_dst) {
                 // Error! We ran out of space in tx buf
-                return NULL;
+                return;
             }
         }
         task_commit_list_src[i] = tx_dst;
         task_commit_list_dst[i] = task_dirty_buf_dst[i];
         task_commit_list_size[i] = task_dirty_buf_size[i];
-      
+
     }
 
     num_dtv = num_tbe;
@@ -167,16 +172,17 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
 void tx_commit() {
     // Copy all tx buff entries to main memory
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
-        memcpy( tx_buf_src[num_dtxv -1],
-                tx_buf_dst[num_dtxv - 1],
-                tx_buf_list_size[num_dtxv - 1]
+        uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
+        memcpy( tx_dirty_src[num_dtxv -1],
+                tx_dirty_dst[num_dtxv - 1],
+                tx_dirty_size[num_dtxv - 1]
         );
-        ((tx_state)(curctx->extra_state))->num_dtxv--;
+        ((tx_state *)(curctx->extra_state))->num_dtxv--;
     }
     // zeroing need_tx_commit MUST come after removing in_tx condition since we
     // perform tx_commit based on the need_tx_commit flag
     ((tx_state *)(curctx->extra_state))->in_tx = 0;
-    ((tx_state *)(curctx->extra_state))->need_tx_commit = 0;
+    ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
 }
 
 

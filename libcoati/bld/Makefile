@@ -1,7 +1,10 @@
 LIB = libcoati
 
-OBJECTS = \
+include ../Makefile.config
+
+OBJECTS += \
 	coati.o \
+  tx.o \
 
 DEPS += \
 	libmsp \
@@ -12,4 +15,3 @@ override CFLAGS += \
 	-I$(SRC_ROOT) \
 	-I$(SRC_ROOT)/include/libcoati \
 
-include ../Makefile.config
