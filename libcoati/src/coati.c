@@ -163,6 +163,7 @@ void task_prologue()
     commit_ph2();
     // Now check if there's a commit here
     if(((tx_state *)curctx->extra_state)->tx_need_commit) {
+        
         tx_commit();
     }
     // Clear all task buf entries before starting new task
@@ -201,9 +202,9 @@ void transition_to(task_t *next_task)
     new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
     new_tx_state->in_tx = cur_tx_state->in_tx;
     new_tx_state->tx_need_commit = need_tx_commit;
-
+  
     next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
-
+    next_ctx->extra_state = new_tx_state;
     next_ctx->task = next_task;
     curctx = next_ctx;
 

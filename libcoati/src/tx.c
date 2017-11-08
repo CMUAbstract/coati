@@ -109,6 +109,7 @@ void * tread(void * addr) {
  * function overheads
  */
 void tcommit_ph1() {
+    printf("In tcommit! \r\n");
     // check for new stuff to add to tx buf from tsk buf
     if(!num_tbe)
         return;
@@ -135,7 +136,6 @@ void tcommit_ph1() {
         task_commit_list_size[i] = task_dirty_buf_size[i];
 
     }
-
     num_dtv = num_tbe;
 }
 
@@ -170,9 +170,14 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
  * @brief write back to source on transaction commit
  */
 void tx_commit() {
+    printf("In tx commit!\r\n");
     // Copy all tx buff entries to main memory
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
+        printf("Committing %x to %x, and tx_buf = %x \r\n",
+                tx_dirty_src[num_dtxv -1],
+                tx_dirty_dst[num_dtxv - 1],
+                tx_dirty_buf);
         memcpy( tx_dirty_src[num_dtxv -1],
                 tx_dirty_dst[num_dtxv - 1],
                 tx_dirty_size[num_dtxv - 1]
