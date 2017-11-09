@@ -5,6 +5,9 @@ include ../Makefile.config
 OBJECTS += \
 	coati.o \
   tx.o \
+  filter.o\
+  event.o \
+
 
 DEPS += \
 	libmsp \

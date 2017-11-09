@@ -127,6 +127,8 @@ void transition_to(task_t *task);
 
 void * read(void * addr);
 int16_t write(void * addr, void * value, size_t size);
+void write_word(void *addr, uint16_t value);
+void write_byte(void *addr, uint8_t value);
 int16_t find(void *);
 
 /**
@@ -141,42 +143,19 @@ int16_t find(void *);
 #define READ_PTR(x_ptr,type) \
     *((type *)read(x_ptr))
 
-
 /**
- * @brief writes a value to x and returns status value (0 for success, -1 for
- * failure)
+ * @brief writes a value to x based on the size of the variable
  */
 #define WRITE(x,val,type) \
-    write(&(x),&(val),sizeof(type))
+    if(sizeof(type) == 1) \
+        write_byte(&(x),(uint8_t)val); \
+    else if(sizeof(type) == 2)\
+        write_word(&(x),(uint16_t)val) \
 
-/**
- * @brief writes a value to the address of x and returns status value (0 for
- * success, -1 for failure
- */
-#define WRITE_PTR(x_ptr,val,type) \
-    write((x_ptr),&(val),sizeof(type))
-
-/**
- * @brief writes a value to the address of x_ptr from the value stored in val_ptr
- */
-#define WRITE_PTR_PTR(x_ptr,val_ptr,type) \
-    write(x_ptr,val_ptr,sizeof(type))
-
-/**
- * @brief declares a variable in a limited scope and passes that to write
- */
-#define WRITE_VAL(x, val, type); \
-{   type _temp = val; \
-    write(&(x), &_temp, sizeof(type)); \
-}
-
-/**
- * @brief declares a var in a limited scope and passes that to the pointer
- * specified
- */
-#define WRITE_PTR_VAL(x_ptr, val, type); \
-{   type _temp = val; \
-    write(&(x), &_temp, sizeof(type)); \
-}
+#define WRITE_PTR(x,val,type) \
+    if(sizeof(type) == 1) \
+        write_byte((x),(uint8_t)val); \
+    else if(sizeof(type) == 2)\
+        write_word((x),(uint16_t)val) \
 
 #endif // COATI_H

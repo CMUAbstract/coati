@@ -10,6 +10,8 @@
 
 #include "coati.h"
 #include "tx.h"
+#include "filter.h"
+#include "event.h"
 
 __nv uint8_t tx_dirty_buf[BUF_SIZE];
 
@@ -38,6 +40,7 @@ void tx_begin() {
     ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 1;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
+    cur_tx_start = curctx->task;
     need_tx_commit = 0;
     num_txbe = 0;
 }
@@ -94,8 +97,9 @@ void * tread(void * addr) {
         if(index > -1) {
             return tx_dirty_dst[index];
         }
-        // Not in tx buf either, so return main memory addr
+        // Not in tx buf either, so add to filter and return main memory addr
         else {
+            add_to_filter(filters + THREAD,addr);
             return addr;
         }
     }
@@ -170,14 +174,9 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
  * @brief write back to source on transaction commit
  */
 void tx_commit() {
-    printf("In tx commit!\r\n");
     // Copy all tx buff entries to main memory
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
-        printf("Committing %x to %x, and tx_buf = %x \r\n",
-                tx_dirty_src[num_dtxv -1],
-                tx_dirty_dst[num_dtxv - 1],
-                tx_dirty_buf);
         memcpy( tx_dirty_src[num_dtxv -1],
                 tx_dirty_dst[num_dtxv - 1],
                 tx_dirty_size[num_dtxv - 1]

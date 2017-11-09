@@ -10,12 +10,13 @@
 
 #include "coati.h"
 #include "tx.h"
+#include "event.h"
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
 __nv context_t context_0 = {
     .task = TASK_REF(_entry_task),
-    .extra_state = NULL
+    .extra_state = &state_0
 };
 
 __nv context_t * volatile curctx = &context_0;
@@ -92,6 +93,7 @@ int16_t  find(void * addr) {
 /*
  * @brief allocs space in buffer and returns a pointer to the spot, returns NULL
  * if buf is out of space
+ * // TODO confirm that the index is at the byte and not the word level
  */
 void * task_dirty_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
@@ -131,8 +133,57 @@ void * read(void * addr) {
 }
 
 /*
+ * @brief writes the value word to address' location in task buf,
+ * returns 0 if successful, -1 if allocation failed
+ */
+void write_byte(void *addr, uint8_t value) {
+    int index;
+    index = find(addr);
+    if(index > -1) {
+        *((uint8_t *)(task_dirty_buf_dst + index)) = value;
+    }
+    else {
+        void * dst = task_dirty_buf_alloc(addr, 1);
+        if(dst) {
+            *((uint8_t *) dst) = value;
+        }
+        else {
+            // Error! we ran out of space
+            while(1);
+            return;
+        }
+    }
+    return;
+}
+
+/*
+ * @brief writes the value word to address' location in task buf,
+ * returns 0 if successful, -1 if allocation failed
+ */
+void write_word(void *addr, uint16_t value) {
+    int index;
+    index = find(addr);
+    if(index > -1) {
+        *((uint16_t *)(task_dirty_buf_dst + index)) = value;
+    }
+    else {
+        void * dst = task_dirty_buf_alloc(addr, 2);
+        if(dst) {
+            *((uint16_t *) dst) = value;
+        }
+        else {
+            // Error! we ran out of space
+            while(1);
+            return;
+        }
+    }
+    return;
+}
+
+/*
  * @brief writes data from value pointer to address' location in task buf,
  * returns 0 if successful, -1 if allocation failed
+ * @comments DEPRACATED
  */
 int16_t write(void *addr, void * value, size_t size) {
     int index;
@@ -163,7 +214,7 @@ void task_prologue()
     commit_ph2();
     // Now check if there's a commit here
     if(((tx_state *)curctx->extra_state)->tx_need_commit) {
-        
+
         tx_commit();
     }
     // Clear all task buf entries before starting new task
@@ -180,6 +231,10 @@ void task_prologue()
  */
 void transition_to(task_t *next_task)
 {
+   // disable event interrupts so we don't have to deal with them during
+   // transition
+    _disable_events();
+
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
     tx_state *new_tx_state;
@@ -202,13 +257,18 @@ void transition_to(task_t *next_task)
     new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
     new_tx_state->in_tx = cur_tx_state->in_tx;
     new_tx_state->tx_need_commit = need_tx_commit;
-  
+
     next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
     next_ctx->extra_state = new_tx_state;
     next_ctx->task = next_task;
     curctx = next_ctx;
 
     task_prologue();
+    // Re-enable events if we're staying in the threads context, but leave them
+    // disabled if we're going into an event task
+    if(!((uint16_t)(curctx->task->func) & 0x1)){
+      _enable_events();
+    }
 
     __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
@@ -222,6 +282,9 @@ void transition_to(task_t *next_task)
 
 /** @brief Entry point upon reboot */
 int main() {
+    // Init needs to set up all the hardware, but leave interrupts disabled so
+    // we can selectively enable them later based on whether we're dealing with
+    // an event or not
     _init();
 
     _numBoots++;
@@ -234,6 +297,14 @@ int main() {
     // transition_to(curtask);
 
     task_prologue();
+
+    // check for running event, disable all event interrupts if we're in one
+    if((uint16_t)(curctx->task->func) & 0x1){
+      _disable_events();
+    }
+    else {
+      _enable_events();
+    }
 
     __asm__ volatile ( // volatile because output operands unused by C
         "br %[nt]\n"

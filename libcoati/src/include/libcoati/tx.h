@@ -22,7 +22,7 @@ typedef struct _tx_state {
     *((type *)tread(&(x)))
 
 #define TX_WRITE(x,val,type) \
-    write(&(x),&(val),sizeof(type))
+    WRITE(x,val,type) 
 
 extern tx_state state_1;
 extern tx_state state_0;
@@ -45,9 +45,5 @@ void * tread(void * addr);
 void tcommit_ph1();
 void * tx_dirty_buf_alloc(void * addr, size_t size);
 void tx_commit();
-
-
-
-
 
 #endif //_TX_H
