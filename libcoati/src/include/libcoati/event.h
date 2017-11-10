@@ -57,7 +57,8 @@ unsigned _temp;
          
 #define EVENT_SETUP( name , gcc_vect, clang_vect) \
           void __attribute__(gcc_vect) clang_vect ## ISR(void) \
-          {   event_handler(CONTEXT_REF(name)); } \
+          { printf("In ev shell\r\n\n\n\n\n"); \
+            event_handler(CONTEXT_REF(name)); } \
           __attribute__((section("interrupt ## clang_vect"),aligned(2))) \
           void(*__## clang_vect)(void) = clang_vect ## ISR;
 

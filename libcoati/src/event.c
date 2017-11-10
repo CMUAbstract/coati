@@ -42,17 +42,19 @@ unsigned djb(unsigned data){
  */
 void event_handler(context_t *new_event_ctx) {
     // Set the last bit so we can use that as an indicator we're in an event
+    printf("In event handler!");
     uint16_t temp = ((uint16_t)new_event_ctx->task->func);
     temp |= 0x1;
     new_event_ctx->task->func = temp;
+    
     // Disable all event interrupts
-    disable();
+    _disable_events();
+    
     // Point threads' context at current context
     thread_ctx = curctx;
-    //LOG("Setting thread_ctx func to %x \r\n",thread_ctx->task->func);
+    
     // Set curctx with prepackaged event_ctx
     curctx = new_event_ctx;
-    //LOG("New cur_ctx to %x \r\n",curctx);
     __asm__ volatile ( // volatile because output operands unused by C
           "mov #0x2400, r1\n"
           "br %[ntask]\n"
@@ -66,7 +68,7 @@ void event_handler(context_t *new_event_ctx) {
  */
 void event_return() {
   uint8_t test = 0;
-  //printf("thread tx status = %i \r\n",thread_ctx->in_transaction);
+  printf("thread tx status = %i \r\n",((tx_state *)thread_ctx->extra_state)->in_tx);
   if(((tx_state *)(thread_ctx->extra_state))->in_tx) {
       test = compare_filters(filters + THREAD, filters + EV);
       if(test) {
@@ -83,7 +85,6 @@ void event_return() {
 
   // Need to re-enable events here
   _enable_events();
-
   // jump to curctx
   __asm__ volatile ( // volatile because output operands unused by C
         "br %[nt]\n"
