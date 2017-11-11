@@ -1,16 +1,16 @@
 #include "include/CoatiPass.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h" //ReplaceInstWithInst
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
+using namespace llvm;
 
-Function *read_byte_func;
-Function *read_word_func;
-Function *write_byte_func;
-Function *write_word_func;
+static Function *read_byte_func;
+static Function *read_word_func;
+static Function *write_byte_func;
+static Function *write_word_func;
 
-/** Alignment - size of access
- *  getPointerOperand()
- *  Value::replaceAllUsesWith(Value *v) - could be useful for replacement
+/**
  */
 namespace {
   /**
@@ -30,14 +30,12 @@ namespace {
           llvm::Type::getInt16PtrTy(getGlobalContext()), NULL);
       read_word_func = cast<Function>(rwc);
 
-      //void write(void * addr, void * value, size_t size);
       Constant *wbc = M.getOrInsertFunction("write_byte",
           FunctionType::getVoidTy(getGlobalContext()),
           llvm::Type::getInt8PtrTy(getGlobalContext()),
           llvm::Type::getInt8Ty(getGlobalContext()), NULL);
       write_byte_func = cast<Function>(wbc);
-      //
-      //void write(void * addr, void * value, size_t size);
+
       Constant *wwc = M.getOrInsertFunction("write_word",
           FunctionType::getVoidTy(getGlobalContext()),
           llvm::Type::getInt16PtrTy(getGlobalContext()),
@@ -58,13 +56,13 @@ namespace {
         args.push_back(new BitCastInst(I->getPointerOperand(),
             llvm::Type::getInt16PtrTy(getGlobalContext()), "", I));
       }
-      call = llvm::CallInst::Create(func, ArrayRef<Value *>(args),
-          I->getName());
-      I->dump();
-      call->dump();
-      errs() << I->getType()->getTypeID()
-        << "\n" << call->getType()->getTypeID() << "\n";
-      ReplaceInstWithInst(I, call);
+      IRBuilder<> builder(I);
+      call = builder.CreateCall(func, ArrayRef<Value *>(args));
+      Value *cast = builder.CreateBitOrPointerCast(call, I->getType());
+
+      errs() << "Performing Read Replacement\n";
+      I->replaceAllUsesWith(cast);
+      I->eraseFromParent();
     }
 
     void insertWrite(StoreInst *I) {
@@ -78,22 +76,11 @@ namespace {
       }
 
       errs() << "\nPerforming Store replacement!\n";
-      I->dump();
-      func->dump();
-      I->getPointerOperand()->dump();
-      I->getValueOperand()->dump();
       args.push_back(I->getPointerOperand());
       args.push_back(I->getValueOperand());
       IRBuilder<> builder(I);
       Value *callVal = builder.CreateCall(func, ArrayRef<Value *>(args));
-      //call = llvm::CallInst::Create(func, ArrayRef<Value *>(args));
-      //call->dump();
-      //ReplaceInstWithInst(I, call);
-      for (auto& U : I->uses()) {
-        User *user = U.getUser();
-        user->setOperand(U.getOperandNo(), callVal);
-      }
-      I->dump();
+      I->replaceAllUsesWith(callVal);
       I->eraseFromParent();
     }
 
@@ -104,15 +91,28 @@ namespace {
     virtual bool runOnModule(Module &M){
       declareFuncs(M);
       for (auto &F : M) {
-        //errs() << "\n" << F.getName() << "\n";
         for (auto &B : F) {
-          for (auto &I : B) {
-            if (auto *op = dyn_cast<StoreInst>(&I)) {
-              insertWrite(op);
-            } else if (auto *op = dyn_cast<LoadInst>(&I)) {
-              insertRead(op);
+          errs() << "Pre Dumping insts\n";
+          for (auto &I : B) { I.dump();}
+          while (1) {
+            Instruction *nextI = NULL;
+            BasicBlock::iterator I, IE;
+            for (I = B.begin(), IE = B.end(); I != IE; ++I) {
+              if (auto *op = dyn_cast<StoreInst>(I)) {
+                insertWrite(op);
+                break;
+              } else if (auto *op = dyn_cast<LoadInst>(I)) {
+                insertRead(op);
+                break;
+              }
+            }
+            if (IE == I) {
+              break;
             }
           }
+          errs() << "\nPost Dumping insts\n";
+          for (auto &I : B) { I.dump();}
+          errs() << "\n\n";
         }
       }
     }
