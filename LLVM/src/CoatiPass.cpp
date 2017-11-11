@@ -3,6 +3,8 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
+
+//#define _COATI_PASS_DEBUG
 using namespace llvm;
 
 static Function *read_byte_func;
@@ -18,8 +20,19 @@ namespace {
    */
   struct CoatiModulePass : public ModulePass {
     static char ID;
+
+    /** @brief Check if V is a global variable in module M */
+    bool isGlobal(Module &M, Value *V) {
+      for (auto &G : M.getGlobalList()) {
+        if (V == &G) { return true;}
+      }
+      return false;
+    }
+
+    /** @brief Declare references to (write|read)_(byte|word)
+     *         in module M and initialize static variables
+     */
     void declareFuncs(Module &M) {
-      // void * read(void * addr);
       Constant *rbc = M.getOrInsertFunction("read_byte",
           FunctionType::getInt8Ty(getGlobalContext()),
           llvm::Type::getInt8PtrTy(getGlobalContext()), NULL);
@@ -43,9 +56,11 @@ namespace {
       write_word_func = cast<Function>(wwc);
     }
 
-    void insertRead(LoadInst *I) {
+    /** @brief Replace I with the relevant call to read()
+     *         read_byte if alignment = 1, read_word otherwise).
+     */
+    void replaceRead(LoadInst *I) {
       Value *func;
-      CallInst *call;
       std::vector<Value *> args;
       if (I->getAlignment() == 1) {
         func = read_byte_func;
@@ -57,17 +72,20 @@ namespace {
             llvm::Type::getInt16PtrTy(getGlobalContext()), "", I));
       }
       IRBuilder<> builder(I);
-      call = builder.CreateCall(func, ArrayRef<Value *>(args));
+      CallInst *call = builder.CreateCall(func, ArrayRef<Value *>(args));
+      // LoadInst could be returning any type, so insert a cast instruction
       Value *cast = builder.CreateBitOrPointerCast(call, I->getType());
 
-      errs() << "Performing Read Replacement\n";
       I->replaceAllUsesWith(cast);
       I->eraseFromParent();
     }
 
-    void insertWrite(StoreInst *I) {
+    /** @brief Replace I with the relevant call to write()
+     *         write_byte if alignment = 1, write_word otherwise).
+     */
+    void replaceWrite(StoreInst *I) {
+      IRBuilder<> builder(I);
       Function *func;
-      CallInst *call;
       std::vector<Value *> args;
       if (I->getAlignment() == 1) {
         func = write_byte_func;
@@ -75,44 +93,60 @@ namespace {
         func = write_word_func;
       }
 
-      errs() << "\nPerforming Store replacement!\n";
       args.push_back(I->getPointerOperand());
       args.push_back(I->getValueOperand());
-      IRBuilder<> builder(I);
-      Value *callVal = builder.CreateCall(func, ArrayRef<Value *>(args));
-      I->replaceAllUsesWith(callVal);
+      Value *call = builder.CreateCall(func, ArrayRef<Value *>(args));
+      I->replaceAllUsesWith(call);
       I->eraseFromParent();
     }
 
     CoatiModulePass() : ModulePass(ID) {}
     /**
-     * @brief Body of pass
+     * @brief Body of pass - replace reads and writes with function calls
      */
     virtual bool runOnModule(Module &M){
+      std::vector<Instruction *> instsToDelete;
       declareFuncs(M);
       for (auto &F : M) {
         for (auto &B : F) {
+#ifdef _COATI_PASS_DEBUG
           errs() << "Pre Dumping insts\n";
           for (auto &I : B) { I.dump();}
+#endif
+          // Loop is strangly structured because traversing a list
+          // of instructions doesn't work after one is erased
           while (1) {
-            Instruction *nextI = NULL;
             BasicBlock::iterator I, IE;
             for (I = B.begin(), IE = B.end(); I != IE; ++I) {
               if (auto *op = dyn_cast<StoreInst>(I)) {
-                insertWrite(op);
-                break;
+                if (isGlobal(M, op->getPointerOperand())) {
+#ifdef _COATI_PASS_DEBUG
+                  errs() << "Store Replacement on var: " <<
+                    op->getPointerOperand()->getName() << "\n";
+#endif
+                  replaceWrite(op);
+                  break;
+                }
               } else if (auto *op = dyn_cast<LoadInst>(I)) {
-                insertRead(op);
-                break;
+                if (isGlobal(M, op->getPointerOperand())) {
+#ifdef _COATI_PASS_DEBUG
+                  errs() << "Load Replacement on var: " <<
+                    op->getPointerOperand()->getName() << "\n";
+#endif
+                  replaceRead(op);
+                  break;
+                }
               }
             }
             if (IE == I) {
               break;
             }
           }
+#ifdef _COATI_PASS_DEBUG
           errs() << "\nPost Dumping insts\n";
           for (auto &I : B) { I.dump();}
           errs() << "\n\n";
+#endif
         }
       }
     }
