@@ -4,13 +4,18 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
 
-//#define _COATI_PASS_DEBUG
+#define _COATI_PASS_DEBUG
 using namespace llvm;
 
 static Function *read_byte_func;
 static Function *read_word_func;
 static Function *write_byte_func;
 static Function *write_word_func;
+/** @brief List of instructions to be delete in the current BB.
+ *         We use this because deleting while traversing gives
+ *         NULL pointer dereferences
+ */
+static std::vector<Instruction *> instsToDelete;
 
 /**
  */
@@ -62,6 +67,7 @@ namespace {
     void replaceRead(LoadInst *I) {
       Value *func;
       std::vector<Value *> args;
+
       if (I->getAlignment() == 1) {
         func = read_byte_func;
         args.push_back(new BitCastInst(I->getPointerOperand(),
@@ -71,13 +77,13 @@ namespace {
         args.push_back(new BitCastInst(I->getPointerOperand(),
             llvm::Type::getInt16PtrTy(getGlobalContext()), "", I));
       }
+
       IRBuilder<> builder(I);
       CallInst *call = builder.CreateCall(func, ArrayRef<Value *>(args));
       // LoadInst could be returning any type, so insert a cast instruction
       Value *cast = builder.CreateBitOrPointerCast(call, I->getType());
-
       I->replaceAllUsesWith(cast);
-      I->eraseFromParent();
+      instsToDelete.push_back(I);
     }
 
     /** @brief Replace I with the relevant call to write()
@@ -87,6 +93,7 @@ namespace {
       IRBuilder<> builder(I);
       Function *func;
       std::vector<Value *> args;
+
       if (I->getAlignment() == 1) {
         func = write_byte_func;
       } else {
@@ -97,7 +104,7 @@ namespace {
       args.push_back(I->getValueOperand());
       Value *call = builder.CreateCall(func, ArrayRef<Value *>(args));
       I->replaceAllUsesWith(call);
-      I->eraseFromParent();
+      instsToDelete.push_back(I);
     }
 
     CoatiModulePass() : ModulePass(ID) {}
@@ -105,45 +112,38 @@ namespace {
      * @brief Body of pass - replace reads and writes with function calls
      */
     virtual bool runOnModule(Module &M){
-      std::vector<Instruction *> instsToDelete;
       declareFuncs(M);
       for (auto &F : M) {
         for (auto &B : F) {
 #ifdef _COATI_PASS_DEBUG
-          errs() << "Pre Dumping insts\n";
+          errs() << "BB instructions before pass\n";
           for (auto &I : B) { I.dump();}
 #endif
-          // Loop is strangly structured because traversing a list
-          // of instructions doesn't work after one is erased
-          while (1) {
-            BasicBlock::iterator I, IE;
-            for (I = B.begin(), IE = B.end(); I != IE; ++I) {
-              if (auto *op = dyn_cast<StoreInst>(I)) {
-                if (isGlobal(M, op->getPointerOperand())) {
+          instsToDelete.clear();
+          for (auto &I : B) {
+            if (auto *op = dyn_cast<StoreInst>(&I)) {
+              if (isGlobal(M, op->getPointerOperand())) {
 #ifdef _COATI_PASS_DEBUG
-                  errs() << "Store Replacement on var: " <<
-                    op->getPointerOperand()->getName() << "\n";
+                errs() << "Store Replacement on var: " <<
+                  op->getPointerOperand()->getName() << "\n";
 #endif
-                  replaceWrite(op);
-                  break;
-                }
-              } else if (auto *op = dyn_cast<LoadInst>(I)) {
-                if (isGlobal(M, op->getPointerOperand())) {
+                replaceWrite(op);
+              }
+            } else if (auto *op = dyn_cast<LoadInst>(&I)) {
+              if (isGlobal(M, op->getPointerOperand())) {
 #ifdef _COATI_PASS_DEBUG
-                  errs() << "Load Replacement on var: " <<
-                    op->getPointerOperand()->getName() << "\n";
+                errs() << "Load Replacement on var: " <<
+                  op->getPointerOperand()->getName() << "\n";
 #endif
-                  replaceRead(op);
-                  break;
-                }
+                replaceRead(op);
               }
             }
-            if (IE == I) {
-              break;
-            }
+          }
+          for (auto &I : instsToDelete) {
+            I->eraseFromParent();
           }
 #ifdef _COATI_PASS_DEBUG
-          errs() << "\nPost Dumping insts\n";
+          errs() << "\nBB instructions after pass\n";
           for (auto &I : B) { I.dump();}
           errs() << "\n\n";
 #endif
