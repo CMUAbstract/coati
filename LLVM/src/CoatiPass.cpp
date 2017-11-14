@@ -2,15 +2,14 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/Support/raw_ostream.h"
 
 #define _COATI_PASS_DEBUG
 using namespace llvm;
 
-static Function *read_byte_func;
-static Function *read_word_func;
-static Function *write_byte_func;
-static Function *write_word_func;
+static Function *read_func;
+static Function *write_func;
 /** @brief List of instructions to be delete in the current BB.
  *         We use this because deleting while traversing gives
  *         NULL pointer dereferences
@@ -38,49 +37,69 @@ namespace {
      *         in module M and initialize static variables
      */
     void declareFuncs(Module &M) {
-      Constant *rbc = M.getOrInsertFunction("read_byte",
-          FunctionType::getInt8Ty(getGlobalContext()),
-          llvm::Type::getInt8PtrTy(getGlobalContext()), NULL);
-      read_byte_func = cast<Function>(rbc);
+      Constant *r = M.getOrInsertFunction("read",
+          FunctionType::getInt16PtrTy(getGlobalContext()), // Returns void *
+          llvm::Type::getInt16PtrTy(getGlobalContext()), // void *addr
+          llvm::Type::getInt16Ty(getGlobalContext()), // unsigned size
+          llvm::Type::getInt16Ty(getGlobalContext()), // acc_type acc
+          NULL);
+      read_func = cast<Function>(r);
 
-      Constant *rwc = M.getOrInsertFunction("read_word",
-          llvm::Type::getInt16Ty(getGlobalContext()),
-          llvm::Type::getInt16PtrTy(getGlobalContext()), NULL);
-      read_word_func = cast<Function>(rwc);
+      Constant *w = M.getOrInsertFunction("write",
+          FunctionType::getVoidTy(getGlobalContext()), // returns Void
+          llvm::Type::getInt16PtrTy(getGlobalContext()), // void *addr
+          llvm::Type::getInt16Ty(getGlobalContext()), // unsigned size
+          llvm::Type::getInt16Ty(getGlobalContext()), // acc_type acc
+          llvm::Type::getInt16Ty(getGlobalContext()), // unsigned value
+          NULL);
+      write_func = cast<Function>(w);
+    }
 
-      Constant *wbc = M.getOrInsertFunction("write_byte",
-          FunctionType::getVoidTy(getGlobalContext()),
-          llvm::Type::getInt8PtrTy(getGlobalContext()),
-          llvm::Type::getInt8Ty(getGlobalContext()), NULL);
-      write_byte_func = cast<Function>(wbc);
+    /** @brief Make __attribute__((annotate())) declarations in source
+     *         file visible in function attributes
+     *  Taken from http://bholt.org/posts/llvm-quick-tricks.html
+     */
+    void prepFuncAttributes(Module &M) {
+      auto global_annos = M.getNamedGlobal("llvm.global.annotations");
+      if (global_annos) {
+        auto a = cast<ConstantArray>(global_annos->getOperand(0));
+        for (int i = 0; i < a->getNumOperands(); i++) {
+          auto e = cast<ConstantStruct>(a->getOperand(i));
 
-      Constant *wwc = M.getOrInsertFunction("write_word",
-          FunctionType::getVoidTy(getGlobalContext()),
-          llvm::Type::getInt16PtrTy(getGlobalContext()),
-          llvm::Type::getInt16Ty(getGlobalContext()), NULL);
-      write_word_func = cast<Function>(wwc);
+          if (auto fn = dyn_cast<Function>(e->getOperand(0)->getOperand(0))) {
+            auto anno = cast<ConstantDataArray>(cast<GlobalVariable>(
+                  e->getOperand(1)->getOperand(0))->getOperand(0))->getAsCString();
+            fn->addFnAttr(anno);
+          }
+        }
+      }
     }
 
     /** @brief Replace I with the relevant call to read()
      *         read_byte if alignment = 1, read_word otherwise).
      */
     void replaceRead(LoadInst *I) {
-      Value *func;
       std::vector<Value *> args;
 
-      if (I->getAlignment() == 1) {
-        func = read_byte_func;
-        args.push_back(new BitCastInst(I->getPointerOperand(),
-            llvm::Type::getInt8PtrTy(getGlobalContext()), "", I));
-      } else {
-        func = read_word_func;
-        args.push_back(new BitCastInst(I->getPointerOperand(),
-            llvm::Type::getInt16PtrTy(getGlobalContext()), "", I));
-      }
+      Value *size = ConstantInt::get(
+          llvm::Type::getInt16Ty(getGlobalContext()),
+          I->getAlignment(), false);
+      // TODO modify to check if in transaction, event, or neither
+      Value *acc = ConstantInt::get(
+          llvm::Type::getInt16Ty(getGlobalContext()), 0, false);
+
+      // Assemble arguments to read()
+      args.push_back(new BitCastInst(I->getPointerOperand(),
+          llvm::Type::getInt16PtrTy(getGlobalContext()), "addr", I));
+      args.push_back(new BitCastInst(size,
+            llvm::Type::getInt16Ty(getGlobalContext()), "size", I));
+      args.push_back(new BitCastInst(acc,
+            llvm::Type::getInt16Ty(getGlobalContext()), "acc", I));
 
       IRBuilder<> builder(I);
-      CallInst *call = builder.CreateCall(func, ArrayRef<Value *>(args));
+      CallInst *call = builder.CreateCall(read_func, ArrayRef<Value *>(args));
       // LoadInst could be returning any type, so insert a cast instruction
+      // TODO cast to pointer of size <alignment> and deref
       Value *cast = builder.CreateBitOrPointerCast(call, I->getType());
       I->replaceAllUsesWith(cast);
       instsToDelete.push_back(I);
@@ -91,18 +110,23 @@ namespace {
      */
     void replaceWrite(StoreInst *I) {
       IRBuilder<> builder(I);
-      Function *func;
       std::vector<Value *> args;
 
-      if (I->getAlignment() == 1) {
-        func = write_byte_func;
-      } else {
-        func = write_word_func;
-      }
+      Value *size = ConstantInt::get(
+          llvm::Type::getInt16Ty(getGlobalContext()), I->getAlignment(), false);
+      // TODO modify to check if in transaction, event, or neither
+      Value *acc = ConstantInt::get(
+          llvm::Type::getInt16Ty(getGlobalContext()), 0, false);
 
+      // Assemble arguements to write()
       args.push_back(I->getPointerOperand());
+      args.push_back(new BitCastInst(size,
+          llvm::Type::getInt16Ty(getGlobalContext()), "size", I));
+      args.push_back(new BitCastInst(acc,
+          llvm::Type::getInt16Ty(getGlobalContext()), "acc", I));
       args.push_back(I->getValueOperand());
-      Value *call = builder.CreateCall(func, ArrayRef<Value *>(args));
+
+      Value *call = builder.CreateCall(write_func, ArrayRef<Value *>(args));
       I->replaceAllUsesWith(call);
       instsToDelete.push_back(I);
     }
@@ -113,7 +137,11 @@ namespace {
      */
     virtual bool runOnModule(Module &M){
       declareFuncs(M);
+      prepFuncAttributes(M);
       for (auto &F : M) {
+        if (F.hasFnAttribute("foobar")) {
+          errs() << "Attribute foobar on " << F.getName() << "\n";
+        }
         for (auto &B : F) {
 #ifdef _COATI_PASS_DEBUG
           errs() << "BB instructions before pass\n";
