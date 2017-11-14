@@ -31,15 +31,18 @@ unsigned _temp;
 
 
 #define EV_READ(x,type) \
-    *((type *)read(&(x)))
+    *((type *)read(&(x),sizeof(type),EVENT))
 
-#define EV_WRITE(x,val,type) \
-    add_to_filter(filters + EV,&(x)); \
-    if(sizeof(type) == 1) \
-        write_byte(&(x),(uint8_t)val); \
-    else if(sizeof(type) == 2)\
-        write_word(&(x),(uint16_t)val) \
-
+#define EV_WRITE(x,val,type,is_ptr) \
+    { if(is_ptr){ \
+          write(&(x),sizeof(type),EVENT,val);\
+      }\
+      else { \
+          type _temp_loc = val;\
+          write(&(x),sizeof(type),EVENT,&_temp_loc);\
+      } \
+    }
+        
 /*
  * @brief handles all the nasty interrupt declaration stuff for events, the
  * programmer just specifies the vector she's chasing in terms of how gcc and

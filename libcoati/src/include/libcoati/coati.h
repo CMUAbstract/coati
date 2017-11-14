@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include <libmsp/mem.h>
-
+#include "types.h"
 #include "repeat.h"
 
 #define TASK_NAME_SIZE 32
@@ -125,37 +125,27 @@ void transition_to(task_t *task);
  *  */
 #define TRANSITION_TO(task) transition_to(TASK_REF(task))
 
-void * read(void * addr);
-int16_t write(void * addr, void * value, size_t size);
-void write_word(void *addr, uint16_t value);
-void write_byte(void *addr, uint8_t value);
+void * read(void * addr, unsigned size, acc_type acc);
+void  write(void *addr, unsigned size, acc_type acc, void *value);
 int16_t find(void *);
 
 /**
  *  @brief returns the value of x after finding it in dirty buf
  */
 #define READ(x,type) \
-    *((type *)read(&(x)))
-
-/**
- *  @brief returns the value stored in x after checking if its in the dirty buf
- */
-#define READ_PTR(x_ptr,type) \
-    *((type *)read(x_ptr))
+    *((type *)read(&(x),sizeof(type),NORMAL))
 
 /**
  * @brief writes a value to x based on the size of the variable
  */
-#define WRITE(x,val,type) \
-    if(sizeof(type) == 1) \
-        write_byte(&(x),(uint8_t)val); \
-    else if(sizeof(type) == 2)\
-        write_word(&(x),(uint16_t)val) \
-
-#define WRITE_PTR(x,val,type) \
-    if(sizeof(type) == 1) \
-        write_byte((x),(uint8_t)val); \
-    else if(sizeof(type) == 2)\
-        write_word((x),(uint16_t)val) \
+#define WRITE(x,val,type,is_ptr) \
+    { if(is_ptr){ \
+          write(&(x),sizeof(type),NORMAL,val);\
+      }\
+      else { \
+          type _temp_loc = val;\
+          write(&(x),sizeof(type),NORMAL,&_temp_loc);\
+      } \
+    }
 
 #endif // COATI_H

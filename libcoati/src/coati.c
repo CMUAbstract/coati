@@ -11,6 +11,7 @@
 #include "coati.h"
 #include "tx.h"
 #include "event.h"
+#include "types.h"
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
@@ -120,17 +121,46 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
  * @brief Returns a pointer to the value stored in the buffer a the src address
  * provided or the value in main memory
  */
-
-void * read(void * addr) {
+void * read(void * addr, unsigned size, acc_type acc) {
     int index;
+    void * dst;
     index = find(addr);
-    if(index > -1) {
-        return task_dirty_buf_dst[index];
+    switch(acc) {
+        case EVENT:
+            // Add to filter?
+        case NORMAL:
+            if(index > -1) {
+                dst = task_dirty_buf_dst[index];
+            }
+            else {
+                dst = addr;
+            }
+            break;
+        case TX:
+            // check tsk buf
+            if(index > -1) {
+                dst = task_dirty_buf_dst[index];
+            }
+            else {
+                // Not in tsk buf, so check tx buf
+                index = tfind(addr);
+                if(index > -1) {
+                    dst = tx_dirty_dst[index];
+                }
+                // Not in tx buf either, so add to filter and return main memory addr
+                else {
+                    add_to_filter(filters + THREAD,addr);
+                    dst = addr;
+                }
+            }
+            break;
+        default:
+            // Error!
+            while(1);
     }
-    else {
-        return addr;
-    }
+    return dst;
 }
+
 
 /*
  * @brief writes the value word to address' location in task buf,
@@ -185,23 +215,35 @@ void write_word(void *addr, uint16_t value) {
  * returns 0 if successful, -1 if allocation failed
  * @comments DEPRACATED
  */
-int16_t write(void *addr, void * value, size_t size) {
+
+void write(void *addr, unsigned size, acc_type acc, void *value) {
     int index;
     index = find(addr);
-    if(index > -1) {
-        memcpy(task_dirty_buf_dst[index], value, size);
+    switch(acc) {
+        case EVENT:
+            add_to_filter(filters + EV, addr);
+        case TX:
+            // Add to TX filter?
+        case NORMAL:
+            if(index > -1) {
+                memcpy(task_dirty_buf_dst[index], value, size);
+            }
+            else {
+                void * dst = task_dirty_buf_alloc(addr, size);
+                if(dst) {
+                    memcpy(dst, value, size);
+                }
+                else {
+                    // Error! we ran out of space
+                    while(1);
+                }
+            }
+            break;
+        default:
+            // Error!
+            while(1);
     }
-    else {
-        void * dst = task_dirty_buf_alloc(addr, size);
-        if(dst) {
-            memcpy(dst, value, size);
-        }
-        else {
-            // Error! we ran out of space
-            return -1;
-        }
-    }
-    return 0;
+    return;
 }
 
 

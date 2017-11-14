@@ -19,10 +19,17 @@ typedef struct _tx_state {
     tx_end();
 
 #define TX_READ(x,type) \
-    *((type *)tread(&(x)))
+    *((type *)read(&(x),sizeof(type),TX))
 
-#define TX_WRITE(x,val,type) \
-    WRITE(x,val,type) 
+#define TX_WRITE(x,val,type,is_ptr) \
+    { if(is_ptr){ \
+          write(&(x),sizeof(type),TX,val);\
+      }\
+      else { \
+          type _temp_loc = val;\
+          write(&(x),sizeof(type),TX,&_temp_loc);\
+      } \
+    }
 
 extern tx_state state_1;
 extern tx_state state_0;
