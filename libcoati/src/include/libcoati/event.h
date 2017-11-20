@@ -50,10 +50,12 @@ unsigned _temp;
  * TODO figure out if there's a way to make these the same
           (CONTEXT_REF(name))->task->func |= 0x1; \
  */
-#define EVENT(index,name) \
-          void name(); \
-          __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
-          __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name ,NULL}; 
+#define EVENT() __attribute((annotate("event_begin")))
+
+//#define EVENT(index,name) \
+//          void name(); \
+//          __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
+//          __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name ,NULL}; 
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)
@@ -61,7 +63,7 @@ unsigned _temp;
 #define EVENT_SETUP( name , gcc_vect, clang_vect) \
           void __attribute__(gcc_vect) clang_vect ## ISR(void) \
           { printf("In ev shell\r\n\n\n\n\n"); \
-            event_handler(CONTEXT_REF(name)); } \
+            event_handler(TASK_REF(name)); } \
           __attribute__((section("interrupt ## clang_vect"),aligned(2))) \
           void(*__## clang_vect)(void) = clang_vect ## ISR;
 

@@ -216,7 +216,7 @@ void write_word(void *addr, uint16_t value) {
  * @comments DEPRACATED
  */
 
-void write(void *addr, unsigned size, acc_type acc, void *value) {
+void write(void *addr, unsigned size, acc_type acc, unsigned value) {
     int index;
     index = find(addr);
     switch(acc) {

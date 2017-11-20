@@ -1,6 +1,7 @@
 add_library(CoatiPass MODULE
     # List your source files here.
     CoatiPass.cpp
+    classify.cpp
 )
 
 # Use C++11 to compile our pass (i.e., supply -std=c++11).

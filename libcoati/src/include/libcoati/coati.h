@@ -126,7 +126,7 @@ void transition_to(task_t *task);
 #define TRANSITION_TO(task) transition_to(TASK_REF(task))
 
 void * read(void * addr, unsigned size, acc_type acc);
-void  write(void *addr, unsigned size, acc_type acc, void *value);
+void  write(void *addr, unsigned size, acc_type acc, unsigned value);
 int16_t find(void *);
 
 /**
