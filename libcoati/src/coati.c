@@ -103,15 +103,15 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
         task_dirty_buf_size[num_tbe - 1];
     }
     else {
-        new_ptr = task_dirty_buf;
+        new_ptr = (uint16_t) task_dirty_buf;
     }
-    if(new_ptr + size > task_dirty_buf + BUF_SIZE) {
+    if(new_ptr + size > (unsigned) (task_dirty_buf + BUF_SIZE)) {
         return NULL;
     }
     else {
         num_tbe++;
         task_dirty_buf_src[num_tbe - 1] = addr;
-        task_dirty_buf_dst[num_tbe - 1] = new_ptr;
+        task_dirty_buf_dst[num_tbe - 1] = (void *) new_ptr;
         task_dirty_buf_size[num_tbe - 1] = size;
     }
     return (void *) new_ptr;
@@ -149,7 +149,7 @@ void * read(void * addr, unsigned size, acc_type acc) {
                 }
                 // Not in tx buf either, so add to filter and return main memory addr
                 else {
-                    add_to_filter(filters + THREAD,addr);
+                    add_to_filter(filters + THREAD,(unsigned) addr);
                     dst = addr;
                 }
             }
@@ -221,7 +221,7 @@ void write(void *addr, unsigned size, acc_type acc, unsigned value) {
     index = find(addr);
     switch(acc) {
         case EVENT:
-            add_to_filter(filters + EV, addr);
+            add_to_filter(filters + EV, (unsigned) addr);
         case TX:
             // Add to TX filter?
         case NORMAL:

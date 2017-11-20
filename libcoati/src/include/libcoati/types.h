@@ -2,9 +2,9 @@
 #define _TYPES_H
 
 typedef enum _acc_type {
-    NORMAL,
-    TX,
-    EVENT
+    NORMAL=0,
+    TX=1,
+    EVENT=2
 } acc_type;
 
 

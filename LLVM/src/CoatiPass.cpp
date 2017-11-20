@@ -12,7 +12,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/Support/raw_ostream.h"
 
-#define _COATI_PASS_DEBUG
+//#define _COATI_PASS_DEBUG
 using namespace llvm;
 
 static Function *read_func;

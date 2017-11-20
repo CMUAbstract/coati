@@ -45,7 +45,7 @@ void event_handler(context_t *new_event_ctx) {
     printf("In event handler!");
     uint16_t temp = ((uint16_t)new_event_ctx->task->func);
     temp |= 0x1;
-    new_event_ctx->task->func = temp;
+    new_event_ctx->task->func = (void (*)(void))temp;
     
     // Disable all event interrupts
     _disable_events();
@@ -74,14 +74,16 @@ void event_return() {
       if(test) {
         thread_ctx->task = cur_tx_start;
         printf("Conflict Detected!! changing to %x  from %x\r\n",
-                        thread_ctx->task->func,curctx->task->func);
+            (unsigned) thread_ctx->task->func,
+            (unsigned) curctx->task->func);
       }
       else{
         printf("No conflicts!!\r\n");
       }
   }
   curctx = thread_ctx;
-  printf("In event return next func =%x\r\n",curctx->task->func);
+  printf("In event return next func =%x\r\n",
+      (unsigned) curctx->task->func);
 
   // Need to re-enable events here
   _enable_events();

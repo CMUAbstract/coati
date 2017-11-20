@@ -1,10 +1,10 @@
 #include <stdarg.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifndef LIBCHAIN_ENABLE_DIAGNOSTICS
 #define LIBCHAIN_PRINTF(...)
 #else
-#include <stdio.h>
 #define LIBCHAIN_PRINTF printf
 #endif
 
@@ -99,7 +99,7 @@ void * tread(void * addr) {
         }
         // Not in tx buf either, so add to filter and return main memory addr
         else {
-            add_to_filter(filters + THREAD,addr);
+            add_to_filter(filters + THREAD,(unsigned) addr);
             return addr;
         }
     }
@@ -154,15 +154,15 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
         tx_dirty_size[num_txbe - 1];
     }
     else {
-        new_ptr = tx_dirty_buf;
+        new_ptr = (uint16_t) tx_dirty_buf;
     }
-    if(new_ptr + size > tx_dirty_buf + BUF_SIZE) {
+    if(new_ptr + size > (unsigned) (tx_dirty_buf + BUF_SIZE)) {
         return NULL;
     }
     else {
         num_txbe++;
         tx_dirty_src[num_txbe - 1] = addr;
-        tx_dirty_dst[num_txbe - 1] = new_ptr;
+        tx_dirty_dst[num_txbe - 1] = (void *) new_ptr;
         tx_dirty_size[num_txbe - 1] = size;
     }
     return (void *) new_ptr;
