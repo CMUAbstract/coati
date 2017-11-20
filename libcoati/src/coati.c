@@ -226,12 +226,20 @@ void write(void *addr, unsigned size, acc_type acc, unsigned value) {
             // Add to TX filter?
         case NORMAL:
             if(index > -1) {
-                memcpy(task_dirty_buf_dst[index], value, size);
+              if (size == sizeof(char)) {
+                *((uint8_t *) task_dirty_buf_dst[index]) = (uint8_t) value;
+              } else {
+                *((unsigned *) task_dirty_buf_dst[index]) = value;
+              }
             }
             else {
                 void * dst = task_dirty_buf_alloc(addr, size);
                 if(dst) {
-                    memcpy(dst, value, size);
+                  if (size == sizeof(char)) {
+                    *((uint8_t *) dst) = (uint8_t) value;
+                  } else {
+                    *((unsigned *) dst) = value;
+                  }
                 }
                 else {
                     // Error! we ran out of space
