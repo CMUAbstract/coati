@@ -125,9 +125,10 @@ void transition_to(task_t *task);
  *  */
 #define TRANSITION_TO(task) transition_to(TASK_REF(task))
 
-void * read(void * addr, unsigned size, acc_type acc);
-void  write(void *addr, unsigned size, acc_type acc, unsigned value);
-int16_t find(void *);
+void * read(const void * addr, unsigned size, acc_type acc);
+void  write(const void *addr, unsigned size, acc_type acc, unsigned value);
+int16_t find(const void *addr);
+void *internal_memcpy(void *dest, void *src, uint16_t num);
 
 /**
  *  @brief returns the value of x after finding it in dirty buf

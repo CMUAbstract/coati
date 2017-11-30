@@ -96,3 +96,24 @@ void event_return() {
 
 }
 
+void *event_memcpy(void *dest, void *src, uint16_t num) {
+  if ((uintptr_t) dest % sizeof(unsigned) == 0 &&
+      (uintptr_t) dest % sizeof(unsigned) == 0) {
+    unsigned *d = dest;
+    unsigned tmp;
+    const unsigned *s = src;
+    for (unsigned i = 0; i < num/sizeof(unsigned); i++) {
+      tmp = *((unsigned *) read(&s[i], sizeof(unsigned), EVENT));
+      write(&d[i], sizeof(unsigned), EVENT, tmp);
+    }
+  } else {
+    char *d = dest;
+    const char *s = src;
+    char tmp;
+    for (unsigned i = 0; i < num; i++) {
+      tmp = *((char *) read(&s[i], sizeof(char), EVENT));
+      write(&d[i], sizeof(char), EVENT, tmp);
+    }
+  }
+  return dest;
+}

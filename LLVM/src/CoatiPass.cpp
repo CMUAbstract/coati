@@ -18,11 +18,38 @@ using namespace llvm;
 static Function *read_func;
 static Function *write_func;
 
-/** @brief List of instructions to be delete in the current BB.
- *         We use this because deleting while traversing gives
- *         NULL pointer dereferences
- */
-static std::vector<Instruction *> instsToDelete;
+static Function *tx_memcpy_func;
+static Function *event_memcpy_func;
+static Function *internal_memcpy_func;
+
+/** @brief Replace a memcpy() call to one of our memcpy functions */
+void replaceMemcpy(CallInst *I, acc_type_t acc_type) {
+#ifdef _COATI_PASS_DEBUG
+  errs() << "Replacing Memcpy: " << acc_type << "\n";
+  I->dump();
+#endif
+  Function *func;
+  if (acc_type == EVENT) {
+    func = event_memcpy_func;
+  } else if (acc_type == TX) {
+    func = tx_memcpy_func;
+  } else {
+    func = internal_memcpy_func;
+  }
+
+  IRBuilder<> builder(I);
+  std::vector<Value *> args;
+  args.push_back(new BitCastInst(I->getArgOperand(0),
+        Type::getInt16PtrTy(getGlobalContext()), "dest", I));
+  args.push_back(new BitCastInst(I->getArgOperand(1),
+        Type::getInt16PtrTy(getGlobalContext()), "src", I));
+  args.push_back(new BitCastInst(I->getArgOperand(2),
+        Type::getInt16Ty(getGlobalContext()), "num", I));
+
+  Value *call = builder.CreateCall(func, ArrayRef<Value *>(args));
+  I->replaceAllUsesWith(call);
+}
+
 
 /**
  */
@@ -61,6 +88,30 @@ namespace {
           Type::getInt16Ty(getGlobalContext()), // unsigned value
           NULL);
       write_func = cast<Function>(w);
+
+      Constant *tx = M->getOrInsertFunction("tx_memcpy",
+          FunctionType::getVoidTy(getGlobalContext()), // returns void
+          Type::getInt16PtrTy(getGlobalContext()), // void *dest
+          Type::getInt16PtrTy(getGlobalContext()), // void *src
+          Type::getInt16Ty(getGlobalContext()), // size_t num
+          NULL);
+      tx_memcpy_func = cast<Function>(tx);
+
+      Constant *event = M->getOrInsertFunction("event_memcpy",
+          FunctionType::getVoidTy(getGlobalContext()), // returns void
+          Type::getInt16PtrTy(getGlobalContext()), // void *dest
+          Type::getInt16PtrTy(getGlobalContext()), // void *src
+          Type::getInt16Ty(getGlobalContext()), // size_t num
+          NULL);
+      event_memcpy_func = cast<Function>(event);
+
+      Constant *intern = M->getOrInsertFunction("internal_memcpy",
+          FunctionType::getVoidTy(getGlobalContext()), // returns void
+          Type::getInt16PtrTy(getGlobalContext()), // void *dest
+          Type::getInt16PtrTy(getGlobalContext()), // void *src
+          Type::getInt16Ty(getGlobalContext()), // size_t num
+          NULL);
+      internal_memcpy_func = cast<Function>(intern);
     }
 
     /** @brief Replace I with the relevant call to read()
@@ -92,7 +143,6 @@ namespace {
       // Insert a load of pointer value
       Value *load = builder.CreateAlignedLoad(cast, I->getAlignment(), "val");
       I->replaceAllUsesWith(load);
-      instsToDelete.push_back(I);
     }
 
     /** @brief Replace I with the relevant call to write()
@@ -119,7 +169,6 @@ namespace {
 
       Value *call = builder.CreateCall(write_func, ArrayRef<Value *>(args));
       I->replaceAllUsesWith(call);
-      instsToDelete.push_back(I);
     }
 
     CoatiModulePass() : ModulePass(ID) {}
@@ -127,21 +176,29 @@ namespace {
      * @brief Body of pass - replace reads and writes with function calls
      */
     virtual bool runOnModule(Module &M){
-      unsigned acc_type;
+      acc_type_t acc_type;
+      /** @brief List of instructions to be delete in the current BB.
+      *         We use this because deleting while traversing gives
+      *         NULL pointer dereferences
+      */
+      std::vector<Instruction *> instsToDelete;
 
       declareFuncs(&M);
       prepFuncAttributes(&M);
       annotateTransactFuncs(&M);
       annotateEventFuncs(&M);
       for (auto &F : M) {
+        // TODO Change to use programmer task annotations
         if (F.hasFnAttribute("tx")) {
-          acc_type = 1;
+          acc_type = TX;
         } else if (F.hasFnAttribute("event")) {
-        acc_type = 2;
+        acc_type = EVENT;
         } else {
-          acc_type = 0;
+          acc_type = NORMAL;
         }
-        errs() << F.getName() << ": " << acc_type << "\n";
+        //errs() << F.getName() << ": " << acc_type << "\n";
+        // TODO - does this replace for called function in normal code?
+        if (acc_type == EVENT && !F.getName().startswith("task")) { continue;}
 
         for (auto &B : F) {
 #ifdef _COATI_PASS_DEBUG
@@ -157,6 +214,7 @@ namespace {
                   op->getPointerOperand()->getName() << "\n";
 #endif
                 replaceWrite(op, acc_type);
+                instsToDelete.push_back(op);
               }
             } else if (auto *op = dyn_cast<LoadInst>(&I)) {
               if (isGlobal(M, op->getPointerOperand())) {
@@ -165,6 +223,14 @@ namespace {
                   op->getPointerOperand()->getName() << "\n";
 #endif
                 replaceRead(op, acc_type);
+                instsToDelete.push_back(op);
+              }
+            } else if (auto *op = dyn_cast<CallInst>(&I)) {
+              if (!op->getCalledFunction()) { continue;}
+              if (acc_type == NORMAL &&
+                  op->getCalledFunction()->getName().find("memcpy") != std::string::npos) {
+                replaceMemcpy(op, NORMAL);
+                instsToDelete.push_back(op);
               }
             }
           }

@@ -25,6 +25,7 @@ void _enable_events();
 void _disable_events();
 
 unsigned _temp;
+void *event_memcpy(void *dest, void *src, uint16_t num);
 
 #define CONTEXT_SYM_NAME(name) \
         _ev_ctx_ ## name

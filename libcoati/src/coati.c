@@ -81,7 +81,7 @@ void commit_ph2() {
 /*
  * @brief returns the index into the buffers of where the data is located
  */
-int16_t  find(void * addr) {
+int16_t  find(const void * addr) {
     if(num_tbe) {
       for(int i = 0; i < num_tbe; i++) {
           if(addr == task_dirty_buf_src[i])
@@ -121,7 +121,7 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
  * @brief Returns a pointer to the value stored in the buffer a the src address
  * provided or the value in main memory
  */
-void * read(void * addr, unsigned size, acc_type acc) {
+void * read(const void * addr, unsigned size, acc_type acc) {
     int index;
     void * dst;
     index = find(addr);
@@ -216,7 +216,7 @@ void write_word(void *addr, uint16_t value) {
  * @comments DEPRACATED
  */
 
-void write(void *addr, unsigned size, acc_type acc, unsigned value) {
+void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
     int index;
     index = find(addr);
     switch(acc) {
@@ -254,6 +254,27 @@ void write(void *addr, unsigned size, acc_type acc, unsigned value) {
     return;
 }
 
+void *internal_memcpy(void *dest, void *src, uint16_t num) {
+  if ((uintptr_t) dest % sizeof(unsigned) == 0 &&
+      (uintptr_t) dest % sizeof(unsigned) == 0) {
+    unsigned *d = dest;
+    unsigned tmp;
+    const unsigned *s = src;
+    for (unsigned i = 0; i < num/sizeof(unsigned); i++) {
+      tmp = *((unsigned *) read(&s[i], sizeof(unsigned), NORMAL));
+      write(&d[i], sizeof(unsigned), NORMAL, tmp);
+    }
+  } else {
+    char *d = dest;
+    const char *s = src;
+    char tmp;
+    for (unsigned i = 0; i < num; i++) {
+      tmp = *((char *) read(&s[i], sizeof(char), NORMAL));
+      write(&d[i], sizeof(char), NORMAL, tmp);
+    }
+  }
+  return dest;
+}
 
 
 /**

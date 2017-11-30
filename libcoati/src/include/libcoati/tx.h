@@ -49,11 +49,12 @@ extern __nv size_t tx_dirty_size[NUM_DIRTY_ENTRIES];
 
 void tx_begin();
 void tx_end();
-int16_t  tfind(void * addr);
+int16_t  tfind(const void * addr);
 void *  t_get_dst(void * addr);
 void * tread(void * addr);
 void tcommit_ph1();
 void * tx_dirty_buf_alloc(void * addr, size_t size);
 void tx_commit();
+void *tx_memcpy(void *dest, void *src, uint16_t num);
 
 #endif //_TX_H

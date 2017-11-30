@@ -55,7 +55,7 @@ void tx_end() {
 /*
  * @brief returns the index into the tx buffers of where the data is located
  */
-int16_t  tfind(void * addr) {
+int16_t  tfind(const void * addr) {
     if(num_txbe) {
       for(int i = 0; i < num_txbe; i++) {
           if(addr == tx_dirty_src[i])
@@ -189,6 +189,25 @@ void tx_commit() {
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
 }
 
-
-
+void *tx_memcpy(void *dest, void *src, uint16_t num) {
+  if ((uintptr_t) dest % sizeof(unsigned) == 0 &&
+      (uintptr_t) dest % sizeof(unsigned) == 0) {
+    unsigned *d = dest;
+    unsigned tmp;
+    const unsigned *s = src;
+    for (unsigned i = 0; i < num/sizeof(unsigned); i++) {
+      tmp = *((unsigned *) read(&s[i], sizeof(unsigned), TX));
+      write(&d[i], sizeof(unsigned), TX, tmp);
+    }
+  } else {
+    char *d = dest;
+    const char *s = src;
+    char tmp;
+    for (unsigned i = 0; i < num; i++) {
+      tmp = *((char *) read(&s[i], sizeof(char), TX));
+      write(&d[i], sizeof(char), TX, tmp);
+    }
+  }
+  return dest;
+}
 

@@ -2,14 +2,16 @@
  *  @brief TODO
  */
 
+#include "include/CoatiPass.h"
 #include "include/classify.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/Support/raw_ostream.h"
 
+static std::vector<Instruction *> instsToDelete;
 
-void getTransactFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
+static void getTransactFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
   L.push_back(F);
   F->addFnAttr("tx");
   for (auto &B : *F) {
@@ -27,9 +29,12 @@ void getTransactFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
               getTransactFuncsHelper(M, nextTask, L);
             }
           }
-        } else if (!fnName.startswith(StringRef("llvm")) &&
+        } else if (fnName.find(StringRef("dbg")) == std::string::npos &&
             !fnName.equals(StringRef("printf"))) {
-          if (std::find(L.begin(), L.end(), calledFn) == L.end()) {
+          if (op->getCalledFunction()->getName().find("memcpy") != std::string::npos) {
+            replaceMemcpy(op, TX);
+            instsToDelete.push_back(op);
+          } else if (std::find(L.begin(), L.end(), calledFn) == L.end()) {
             getTransactFuncsHelper(M, calledFn, L);
           }
         }
@@ -39,7 +44,7 @@ void getTransactFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
 }
 
 
-void getEventFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
+static void getEventFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
   L.push_back(F);
   F->addFnAttr("event");
   for (auto &B : *F) {
@@ -59,9 +64,12 @@ void getEventFuncsHelper(Module *M, Function *F, std::vector<Function *> L) {
             }
           }
         } else if (!fnName.equals(StringRef("event_return")) &&
-            !fnName.startswith(StringRef("llvm")) &&
+            fnName.find(StringRef("dbg")) == std::string::npos &&
             !fnName.equals(StringRef("printf"))) {
-          if (std::find(L.begin(), L.end(), op->getCalledFunction()) == L.end()) {
+          if (op->getCalledFunction()->getName().find("memcpy") != std::string::npos) {
+            replaceMemcpy(op, EVENT);
+            instsToDelete.push_back(op);
+          } else if (std::find(L.begin(), L.end(), op->getCalledFunction()) == L.end()) {
             getEventFuncsHelper(M, op->getCalledFunction(), L);
           }
         }
@@ -75,9 +83,11 @@ void annotateTransactFuncs(Module *M) {
   std::vector<Function *> L;
   for (auto &F : *M) {
     L.clear();
+    instsToDelete.clear();
     if (F.hasFnAttribute("tx_begin")) {
       getTransactFuncsHelper(M, &F, L);
     }
+    for (auto &I : instsToDelete) { I->eraseFromParent();}
   }
 }
 
@@ -85,10 +95,12 @@ void annotateTransactFuncs(Module *M) {
 void annotateEventFuncs(Module *M) {
   std::vector<Function *> L;
   for (auto &F : *M) {
+    instsToDelete.clear();
     L.clear();
     if (F.hasFnAttribute("event_begin")) {
       getEventFuncsHelper(M, &F, L);
     }
+    for (auto &I : instsToDelete) { I->eraseFromParent();}
   }
 }
 
