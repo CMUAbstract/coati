@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifndef LIBCHAIN_ENABLE_DIAGNOSTICS
 #define LIBCHAIN_PRINTF(...)
@@ -17,7 +18,8 @@
 __nv context_t context_1 = {0};
 __nv context_t context_0 = {
     .task = TASK_REF(_entry_task),
-    .extra_state = &state_0
+    .extra_state = &state_0,
+    .extra_ev_state = &state_ev_0
 };
 
 __nv context_t * volatile curctx = &context_0;
@@ -127,7 +129,23 @@ void * read(const void * addr, unsigned size, acc_type acc) {
     index = find(addr);
     switch(acc) {
         case EVENT:
-            // Add to filter?
+            // check tsk buf
+            if(index > -1) {
+                dst = task_dirty_buf_dst[index];
+            }
+            else {
+                // Not in tsk buf, so check event buf
+                index = evfind(addr);
+                if(index > -1) {
+                    dst = ev_dirty_dst[index];
+                }
+                // Not in tx buf either, so add to filter and return main memory addr
+                else {
+                    add_to_filter(read_filters + EV,(unsigned)addr);
+                    dst = addr;
+                }
+            }
+            break;
         case NORMAL:
             if(index > -1) {
                 dst = task_dirty_buf_dst[index];
@@ -149,7 +167,7 @@ void * read(const void * addr, unsigned size, acc_type acc) {
                 }
                 // Not in tx buf either, so add to filter and return main memory addr
                 else {
-                    add_to_filter(filters + THREAD,(unsigned) addr);
+                    add_to_filter(read_filters + THREAD,(unsigned)addr);
                     dst = addr;
                 }
             }
@@ -221,8 +239,9 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
     index = find(addr);
     switch(acc) {
         case EVENT:
-            add_to_filter(filters + EV, (unsigned) addr);
+            add_to_filter(write_filters + EV, (unsigned) addr);
         case TX:
+            add_to_filter(write_filters + THREAD, (unsigned)addr);
             // Add to TX filter?
         case NORMAL:
             if(index > -1) {
@@ -281,11 +300,13 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
  * @brief Function to be invoked at the beginning of every task
  */
 void task_prologue()
-{
+{   
+    printf("Checking if in tx: result = %i \r\n",
+           ((tx_state *)curctx->extra_state)->in_tx);
     commit_ph2();
     // Now check if there's a commit here
     if(((tx_state *)curctx->extra_state)->tx_need_commit) {
-
+        printf("Running tx commit!\r\n");
         tx_commit();
     }
     // Clear all task buf entries before starting new task
@@ -309,35 +330,50 @@ void transition_to(task_t *next_task)
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
     tx_state *new_tx_state;
+    ev_state *new_ev_state;
     tx_state *cur_tx_state =(tx_state *)(curctx->extra_state);
+    ev_state *cur_ev_state =(ev_state *)(curctx->extra_ev_state);
     // Copy all of the variables into the dirty buffer
     // update the extra state objects
     // update current task pointer
     // reset stack pointer
     // jump to next task
 
+    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+    new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                    &state_ev_0);
+    printf("Checking if in tx: result = %i, %i \r\n",cur_tx_state->in_tx,
+           ((tx_state *)curctx->extra_state)->in_tx);
+
     if(cur_tx_state->in_tx) {
+        printf("Running tcommit phase 1\r\n");
         tcommit_ph1();
+        new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
+    }
+    else if(cur_ev_state->in_ev) {
+        evcommit_ph1();
     }
     else {
         commit_ph1();
     }
 
-    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+    new_ev_state->in_ev = cur_ev_state->in_ev;
+    new_ev_state->ev_need_commit = need_ev_commit;
 
-    new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
     new_tx_state->in_tx = cur_tx_state->in_tx;
     new_tx_state->tx_need_commit = need_tx_commit;
 
+
     next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
     next_ctx->extra_state = new_tx_state;
+    next_ctx->extra_ev_state = new_ev_state;
     next_ctx->task = next_task;
     curctx = next_ctx;
 
     task_prologue();
     // Re-enable events if we're staying in the threads context, but leave them
     // disabled if we're going into an event task
-    if(!((uint16_t)(curctx->task->func) & 0x1)){
+    if(((ev_state *)curctx->extra_state)->in_ev == 0){
       _enable_events();
     }
 
@@ -366,11 +402,12 @@ int main() {
     //       prologue discussed in chain.h is implemented (requires compiler
     //       support)
     // transition_to(curtask);
+    printf("transitioning to %x \r\n",curctx->task->func);
 
     task_prologue();
 
     // check for running event, disable all event interrupts if we're in one
-    if((uint16_t)(curctx->task->func) & 0x1){
+    if(((ev_state *)curctx->extra_ev_state)->in_ev){
       _disable_events();
     }
     else {

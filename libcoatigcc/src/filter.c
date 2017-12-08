@@ -1,4 +1,4 @@
-#include "bloom_filter.h"
+#include "filter.h"
 #include <stdio.h>
 #include <assert.h>
 

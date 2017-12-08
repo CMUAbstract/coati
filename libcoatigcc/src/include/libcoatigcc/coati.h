@@ -41,6 +41,9 @@ typedef struct _context_t {
     task_t *task;
     /** @brief Pointer to the extra state we need to swap on context switch */
     void *extra_state;
+    /** @brief Another one! We need this one to handle events */
+    void *extra_ev_state;
+
 } context_t;
 
 extern context_t * volatile curctx;

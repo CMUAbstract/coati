@@ -12,14 +12,14 @@ typedef struct _tx_state {
     uint8_t tx_need_commit;
 } tx_state;
 
-//#define TX_BEGIN \
-//    tx_begin();
-//
-//#define TX_END \
-//    tx_end();
+#define TX_BEGIN \
+    tx_begin();
 
-#define TX_BEGIN() __attribute((annotate("tx_begin")))
-#define TX_END()__attribute((annotate("tx_end")))
+#define TX_END \
+    tx_end();
+
+//#define TX_BEGIN() __attribute((annotate("tx_begin")))
+//#define TX_END()__attribute((annotate("tx_end")))
 
 #define TX_READ(x,type) \
     *((type *)read(&(x),sizeof(type),TX))
@@ -48,6 +48,7 @@ extern __nv size_t tx_dirty_size[NUM_DIRTY_ENTRIES];
 
 
 void tx_begin();
+void my_tx_begin();
 void tx_end();
 int16_t  tfind(const void * addr);
 void *  t_get_dst(void * addr);

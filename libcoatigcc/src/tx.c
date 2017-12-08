@@ -40,6 +40,17 @@ void tx_begin() {
     ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 1;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
+    printf("In tx begin!!\r\n");
+    cur_tx_start = curctx->task;
+    need_tx_commit = 0;
+    num_txbe = 0;
+}
+
+void my_tx_begin() {
+    ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
+    ((tx_state *)(curctx->extra_state))->in_tx = 1;
+    ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
+    printf("In tx begin!!\r\n");
     cur_tx_start = curctx->task;
     need_tx_commit = 0;
     num_txbe = 0;
@@ -49,6 +60,7 @@ void tx_begin() {
  * @brief set flags for committing a tx
  */
 void tx_end() {
+    printf("Setting tx_end flags!\r\n");
     need_tx_commit = 1;
 }
 
@@ -83,7 +95,7 @@ void *  t_get_dst(void * addr) {
  * @brief Returns a pointer to the value stored in the task buffer or the
  * transaction buffer or (finally) the value in main memory
  */
-
+/*
 void * tread(void * addr) {
     int index;
     index = find(addr);
@@ -99,12 +111,12 @@ void * tread(void * addr) {
         }
         // Not in tx buf either, so add to filter and return main memory addr
         else {
-            add_to_filter(filters + THREAD,(unsigned) addr);
+            add_to_filter(read_filters + THREAD,addr);
             return addr;
         }
     }
 }
-
+*/
 /*
  * @brief sets the write back locations to the tx buf instead of main memory
  * @comments warning, this involves multiple linear searches all at once which
@@ -132,6 +144,8 @@ void tcommit_ph1() {
                       task_dirty_buf_size[i]);
             if(!tx_dst) {
                 // Error! We ran out of space in tx buf
+                printf("Out of space!\r\n");
+                while(1);
                 return;
             }
         }
@@ -177,6 +191,8 @@ void tx_commit() {
     // Copy all tx buff entries to main memory
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
+        printf("Copying from %x to %x \r\n", tx_dirty_src[num_dtxv-1],
+          tx_dirty_dst[num_dtxv - 1]);
         memcpy( tx_dirty_src[num_dtxv -1],
                 tx_dirty_dst[num_dtxv - 1],
                 tx_dirty_size[num_dtxv - 1]
