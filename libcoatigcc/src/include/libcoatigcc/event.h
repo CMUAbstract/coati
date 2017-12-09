@@ -29,9 +29,11 @@ extern bloom_filter read_filters[NUM_PRIO_LEVELS];
 
 void event_return();
 void event_handler();
+void ev_commit();
 
 int16_t  evfind(const void * addr);
 void *  ev_get_dst(void * addr);
+void * ev_dirty_buf_alloc(void * addr, size_t size);
 
 extern volatile uint16_t num_evbe;
 extern __nv uint8_t ev_dirty_buf[BUF_SIZE];

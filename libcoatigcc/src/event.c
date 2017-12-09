@@ -72,8 +72,10 @@ void event_handler(context_t *new_event_ctx) {
     uint16_t temp = ((uint16_t)new_event_ctx->task->func);
     temp |= 0x1;
     new_event_ctx->task->func = (void (*)(void))temp;
+    new_event_ctx->extra_ev_state = curctx->extra_ev_state;
     // Disable all event interrupts
     _disable_events();
+    printf("In event handler!\r\n");
 
     // Point threads' context at current context
     thread_ctx = curctx;
@@ -96,12 +98,19 @@ void event_return() {
   // Do nothing, we'll check for conflicts on tx commit
   need_ev_commit = 1;
   if(((tx_state *)(thread_ctx->extra_state))->in_tx == 0) {
+      printf("Starting ev_commit\r\n");
+      ev_commit();
+      ((ev_state *)(thread_ctx->extra_ev_state))->ev_need_commit= 0;
+      ((ev_state *)(thread_ctx->extra_ev_state))->num_devv= 0;
+      need_ev_commit = 0;
   }
-  printf("Returning from event!\r\n");
+  num_evbe = 0;
+  ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= 0;
+  ((ev_state *)(curctx->extra_ev_state))->in_ev= 0;
   curctx = thread_ctx;
-  // Need to re-enable events here
+  // Need to re-enable events her
+  printf("Enabling events\r\n");
   _enable_events();
-  while(1);
   // jump to curctx
   __asm__ volatile ( // volatile because output operands unused by C
         "br %[nt]\n"
@@ -151,11 +160,12 @@ void evcommit_ph1() {
         // hunt for addr in tx buf and return new dst if it's in there
         void *ev_dst = ev_get_dst(task_dirty_buf_src[i]);
         if(!ev_dst) {
+            printf("Running event buf alloc!\r\n");
             ev_dst = tx_dirty_buf_alloc(task_dirty_buf_src[i],
                       task_dirty_buf_size[i]);
             if(!ev_dst) {
                 // Error! We ran out of space in tx buf
-                printf("Out of space!\r\n");
+                printf("Out of event space!\r\n");
                 while(1);
                 return;
             }
@@ -172,6 +182,9 @@ void ev_commit() {
     // Copy all tx buff entries to main memory
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
         uint16_t num_devv =((ev_state *)(curctx->extra_ev_state))->num_devv;
+        printf("Copying %i th time from %x to %x \r\n", num_devv-1, 
+        ev_dirty_src[num_devv-1],
+        ev_dirty_dst[num_devv - 1]);
         memcpy( ev_dirty_src[num_devv -1],
                 ev_dirty_dst[num_devv - 1],
                 ev_dirty_size[num_devv - 1]
@@ -205,3 +218,32 @@ void *event_memcpy(void *dest, void *src, uint16_t num) {
   }
   return dest;
 }
+
+/*
+ * @brief allocs space in tx buffer and returns a pointer to the spot, returns
+ * NULL if buf is out of space
+ */
+void * ev_dirty_buf_alloc(void * addr, size_t size) {
+    uint16_t new_ptr;
+    printf("num_evbe = %i \r\n",num_evbe);
+    if(num_evbe) {
+        new_ptr = (uint16_t) ev_dirty_dst[num_evbe - 1] +
+        ev_dirty_size[num_evbe - 1];
+    }
+    else {
+        new_ptr = (uint16_t) ev_dirty_buf;
+    }
+    if(new_ptr + size > (unsigned) (ev_dirty_buf + BUF_SIZE)) {
+        return NULL;
+    }
+    else {
+        num_evbe++;
+        printf("new src = %x new dst = %x index %i\r\n", addr, new_ptr, num_evbe);
+        //(((ev_state *)(curctx->extra_ev_state))->num_devv)++;
+        ev_dirty_src[num_evbe - 1] = addr;
+        ev_dirty_dst[num_evbe - 1] = (void *) new_ptr;
+        ev_dirty_size[num_evbe - 1] = size;
+    }
+    return (void *) new_ptr;
+}
+

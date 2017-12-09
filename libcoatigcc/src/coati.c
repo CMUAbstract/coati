@@ -129,21 +129,17 @@ void * read(const void * addr, unsigned size, acc_type acc) {
     index = find(addr);
     switch(acc) {
         case EVENT:
-            // check tsk buf
+            //TODO figure out if we can get rid of the extra search on each
+            //event access
+            // Not in tsk buf, so check event buf
+            index = evfind(addr);
             if(index > -1) {
-                dst = task_dirty_buf_dst[index];
+                dst = ev_dirty_dst[index];
             }
+            // Not in tx buf either, so add to filter and return main memory addr
             else {
-                // Not in tsk buf, so check event buf
-                index = evfind(addr);
-                if(index > -1) {
-                    dst = ev_dirty_dst[index];
-                }
-                // Not in tx buf either, so add to filter and return main memory addr
-                else {
-                    add_to_filter(read_filters + EV,(unsigned)addr);
-                    dst = addr;
-                }
+                add_to_filter(read_filters + EV,(unsigned)addr);
+                dst = addr;
             }
             break;
         case NORMAL:
@@ -240,6 +236,29 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
     switch(acc) {
         case EVENT:
             add_to_filter(write_filters + EV, (unsigned) addr);
+            printf("Running event write!\r\n");
+            index = evfind(addr);
+            if(index > -1) {
+              if (size == sizeof(char)) {
+                *((uint8_t *) ev_dirty_dst[index]) = (uint8_t) value;
+              } else {
+                *((unsigned *) ev_dirty_dst[index]) = value;
+              }
+            }
+            else {
+                void * dst = ev_dirty_buf_alloc(addr, size);
+                if(dst) {
+                  if (size == sizeof(char)) {
+                    *((uint8_t *) dst) = (uint8_t) value;
+                  } else {
+                    *((unsigned *) dst) = value;
+                  }
+                }
+                else {
+                    // Error! we ran out of space
+                    while(1);
+                }
+            }
         case TX:
             add_to_filter(write_filters + THREAD, (unsigned)addr);
             // Add to TX filter?
@@ -326,6 +345,7 @@ void transition_to(task_t *next_task)
    // disable event interrupts so we don't have to deal with them during
    // transition
     _disable_events();
+    printf("Disabled events");
 
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
@@ -350,9 +370,6 @@ void transition_to(task_t *next_task)
         tcommit_ph1();
         new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
     }
-    else if(cur_ev_state->in_ev) {
-        evcommit_ph1();
-    }
     else {
         commit_ph1();
     }
@@ -374,6 +391,7 @@ void transition_to(task_t *next_task)
     // Re-enable events if we're staying in the threads context, but leave them
     // disabled if we're going into an event task
     if(((ev_state *)curctx->extra_state)->in_ev == 0){
+      printf("Enabling events\r\n");
       _enable_events();
     }
 
@@ -411,6 +429,7 @@ int main() {
       _disable_events();
     }
     else {
+      printf("Enabling events!\r\n");
       _enable_events();
     }
 

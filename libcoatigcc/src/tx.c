@@ -188,6 +188,7 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
  * @brief write back to source on transaction commit
  */
 void tx_commit() {
+    // TODO insert check for serialize after-before
     // Copy all tx buff entries to main memory
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
@@ -199,10 +200,28 @@ void tx_commit() {
         );
         ((tx_state *)(curctx->extra_state))->num_dtxv--;
     }
+    // Now compare filters to see if we can safely merge in any ongoing events
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit){
+          int conflict = 0;
+          conflict = compare_filters(read_filters + EV, read_filters + THREAD);
+          conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
+          conflict |= compare_filters(read_filters + THREAD, write_filters +
+          EV);
+          if(!conflict){
+              printf("committing event accesses!\r\n");
+              ev_commit();
+          }
+          else{
+              printf("Conflict! Cannot commit\r\n");
+          }
+    }
     // zeroing need_tx_commit MUST come after removing in_tx condition since we
     // perform tx_commit based on the need_tx_commit flag
     ((tx_state *)(curctx->extra_state))->in_tx = 0;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
+    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= 0;
+    need_ev_commit = 0;
+    need_tx_commit = 0;
 }
 
 void *tx_memcpy(void *dest, void *src, uint16_t num) {
