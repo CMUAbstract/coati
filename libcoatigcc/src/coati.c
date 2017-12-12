@@ -22,7 +22,12 @@ __nv context_t context_0 = {
     .extra_ev_state = &state_ev_0
 };
 
+
 __nv context_t * volatile curctx = &context_0;
+
+// Set these up here so we can access the pointers easily
+__nv context_t * volatile context_ptr0 = &context_0;
+__nv context_t * volatile context_ptr1 = &context_1;
 
 // for internal instrumentation purposes
 __nv volatile unsigned _numBoots = 0;
@@ -123,7 +128,7 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
  * @brief Returns a pointer to the value stored in the buffer a the src address
  * provided or the value in main memory
  */
-void * read(const void * addr, unsigned size, acc_type acc) {
+void * read(const void *addr, unsigned size, acc_type acc) {
     int index;
     void * dst;
     index = find(addr);
@@ -232,6 +237,7 @@ void write_word(void *addr, uint16_t value) {
 
 void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
     int index;
+    printf("value incoming = %i type = %i \r\n", value, acc);
     index = find(addr);
     switch(acc) {
         case EVENT:
@@ -319,8 +325,8 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
  * @brief Function to be invoked at the beginning of every task
  */
 void task_prologue()
-{   
-    printf("Checking if in tx: result = %i \r\n",
+{
+    printf("Prologue: Checking if in tx: result = %i \r\n",
            ((tx_state *)curctx->extra_state)->in_tx);
     commit_ph2();
     // Now check if there's a commit here
@@ -362,7 +368,7 @@ void transition_to(task_t *next_task)
     new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
     new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                     &state_ev_0);
-    printf("Checking if in tx: result = %i, %i \r\n",cur_tx_state->in_tx,
+    printf("Transition Checking if in tx: result = %i, %i \r\n",cur_tx_state->in_tx,
            ((tx_state *)curctx->extra_state)->in_tx);
 
     if(cur_tx_state->in_tx) {
@@ -391,7 +397,7 @@ void transition_to(task_t *next_task)
     // Re-enable events if we're staying in the threads context, but leave them
     // disabled if we're going into an event task
     if(((ev_state *)curctx->extra_state)->in_ev == 0){
-      printf("Enabling events\r\n");
+      printf("TT: Enabling events\r\n");
       _enable_events();
     }
 
@@ -399,7 +405,7 @@ void transition_to(task_t *next_task)
         "mov #0x2400, r1\n"
         "br %[ntask]\n"
         :
-        : [ntask] "r" (next_task->func)
+        : [ntask] "r" (curctx->task->func)
     );
 
 }
@@ -429,7 +435,7 @@ int main() {
       _disable_events();
     }
     else {
-      printf("Enabling events!\r\n");
+      printf("Main: Enabling events!\r\n");
       _enable_events();
     }
 

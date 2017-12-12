@@ -25,6 +25,7 @@ extern void *task_commit_list_src[];
 extern void *task_commit_list_dst[];
 extern size_t task_commit_list_size[];
 
+
 extern uint16_t volatile num_tbe;
 extern uint16_t num_dtv;
 
@@ -47,6 +48,10 @@ typedef struct _context_t {
 } context_t;
 
 extern context_t * volatile curctx;
+//extern context_t * volatile context_ptr0; 
+//extern context_t * volatile context_ptr1;
+extern context_t * volatile context_ptr0; 
+extern context_t * volatile context_ptr1;
 
 /** @brief Internal macro for constructing name of task symbol */
 #define TASK_SYM_NAME(func) _task_ ## func
@@ -148,7 +153,7 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
       }\
       else { \
           type _temp_loc = val;\
-          write(&(x),sizeof(type),NORMAL,&_temp_loc);\
+          write(&(x),sizeof(type),NORMAL,_temp_loc);\
       } \
     }
 

@@ -63,7 +63,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
       }\
       else { \
           type _temp_loc = val;\
-          write(&(x),sizeof(type),EVENT,&_temp_loc);\
+          write(&(x),sizeof(type),EVENT,_temp_loc);\
       } \
     }
 
@@ -75,11 +75,25 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
           (CONTEXT_REF(name))->task->func |= 0x1; \
  */
 //#define EVENT() __attribute((annotate("event_begin")))
+#define EV_ST_SYM_NAME(name) _ev_state_ ## name
+
+/*
+ * We need the name and number here to handle the two different objects we're
+ * keeping around
+ */
+#define EV_ST_REF(name) \
+        &EV_ST_SYM_NAME(name)
+
 
 #define EVENT(index,name) \
           void name(); \
           __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
-          __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name ,NULL};
+          __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0}; \
+          __nv ev_state EV_ST_SYM_NAME(name) = {0,1,0};\
+          __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
+                                                    TX_ST_REF(name), \
+                                                    EV_ST_REF(name) \
+                                                  };
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)

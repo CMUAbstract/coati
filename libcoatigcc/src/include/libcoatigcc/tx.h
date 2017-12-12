@@ -20,6 +20,10 @@ typedef struct _tx_state {
 
 //#define TX_BEGIN() __attribute((annotate("tx_begin")))
 //#define TX_END()__attribute((annotate("tx_end")))
+#define TX_ST_SYM_NAME(name) _tx_state_ ## name
+
+#define TX_ST_REF(name) \
+        &TX_ST_SYM_NAME(name)
 
 #define TX_READ(x,type) \
     *((type *)read(&(x),sizeof(type),TX))
@@ -30,7 +34,7 @@ typedef struct _tx_state {
       }\
       else { \
           type _temp_loc = val;\
-          write(&(x),sizeof(type),TX,&_temp_loc);\
+          write(&(x),sizeof(type),TX,_temp_loc);\
       } \
     }
 
