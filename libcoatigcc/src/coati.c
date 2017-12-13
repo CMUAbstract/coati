@@ -2,13 +2,13 @@
 #include <string.h>
 #include <stdio.h>
 
-#ifndef LIBCHAIN_ENABLE_DIAGNOSTICS
-#define LIBCHAIN_PRINTF(...)
+
+#ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
+#define LCG_PRINTF(...)
 #else
 #include <stdio.h>
-#define LIBCHAIN_PRINTF printf
+#define LCG_PRINTF printf
 #endif
-
 #include "coati.h"
 #include "tx.h"
 #include "event.h"
@@ -237,12 +237,12 @@ void write_word(void *addr, uint16_t value) {
 
 void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
     int index;
-    printf("value incoming = %i type = %i \r\n", value, acc);
+    LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
     index = find(addr);
     switch(acc) {
         case EVENT:
             add_to_filter(write_filters + EV, (unsigned) addr);
-            printf("Running event write!\r\n");
+            LCG_PRINTF("Running event write!\r\n");
             index = evfind(addr);
             if(index > -1) {
               if (size == sizeof(char)) {
@@ -326,12 +326,12 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
  */
 void task_prologue()
 {
-    printf("Prologue: Checking if in tx: result = %i \r\n",
+    LCG_PRINTF("Prologue: Checking if in tx: result = %i \r\n",
            ((tx_state *)curctx->extra_state)->in_tx);
     commit_ph2();
     // Now check if there's a commit here
     if(((tx_state *)curctx->extra_state)->tx_need_commit) {
-        printf("Running tx commit!\r\n");
+        LCG_PRINTF("Running tx commit!\r\n");
         tx_commit();
     }
     // Clear all task buf entries before starting new task
@@ -351,7 +351,7 @@ void transition_to(task_t *next_task)
    // disable event interrupts so we don't have to deal with them during
    // transition
     _disable_events();
-    printf("Disabled events");
+    LCG_PRINTF("Disabled events");
 
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
@@ -368,11 +368,11 @@ void transition_to(task_t *next_task)
     new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
     new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                     &state_ev_0);
-    printf("Transition Checking if in tx: result = %i, %i \r\n",cur_tx_state->in_tx,
+    LCG_PRINTF("Transition Checking if in tx: result = %i, %i \r\n",cur_tx_state->in_tx,
            ((tx_state *)curctx->extra_state)->in_tx);
 
     if(cur_tx_state->in_tx) {
-        printf("Running tcommit phase 1\r\n");
+        LCG_PRINTF("Running tcommit phase 1\r\n");
         tcommit_ph1();
         new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
     }
@@ -397,7 +397,7 @@ void transition_to(task_t *next_task)
     // Re-enable events if we're staying in the threads context, but leave them
     // disabled if we're going into an event task
     if(((ev_state *)curctx->extra_state)->in_ev == 0){
-      printf("TT: Enabling events\r\n");
+      LCG_PRINTF("TT: Enabling events\r\n");
       _enable_events();
     }
 
@@ -426,7 +426,7 @@ int main() {
     //       prologue discussed in chain.h is implemented (requires compiler
     //       support)
     // transition_to(curtask);
-    printf("transitioning to %x \r\n",curctx->task->func);
+    LCG_PRINTF("transitioning to %x \r\n",curctx->task->func);
 
     task_prologue();
 
@@ -435,7 +435,7 @@ int main() {
       _disable_events();
     }
     else {
-      printf("Main: Enabling events!\r\n");
+      LCG_PRINTF("Main: Enabling events!\r\n");
       _enable_events();
     }
 

@@ -2,10 +2,10 @@
 #include <string.h>
 #include <stdio.h>
 
-#ifndef LIBCHAIN_ENABLE_DIAGNOSTICS
-#define LIBCHAIN_PRINTF(...)
+#ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
+#define LCG_PRINTF(...)
 #else
-#define LIBCHAIN_PRINTF printf
+#define LCG_PRINTF printf
 #endif
 
 #include "coati.h"
@@ -40,7 +40,7 @@ void tx_begin() {
     ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 1;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
-    printf("In tx begin!!\r\n");
+    LCG_PRINTF("In tx begin!!\r\n");
     cur_tx_start = curctx->task;
     need_tx_commit = 0;
     num_txbe = 0;
@@ -50,7 +50,7 @@ void my_tx_begin() {
     ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 1;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
-    printf("In tx begin!!\r\n");
+    LCG_PRINTF("In tx begin!!\r\n");
     cur_tx_start = curctx->task;
     need_tx_commit = 0;
     num_txbe = 0;
@@ -60,7 +60,7 @@ void my_tx_begin() {
  * @brief set flags for committing a tx
  */
 void tx_end() {
-    printf("Setting tx_end flags!\r\n");
+    LCG_PRINTF("Setting tx_end flags!\r\n");
     need_tx_commit = 1;
 }
 
@@ -125,7 +125,7 @@ void * tread(void * addr) {
  * function overheads
  */
 void tcommit_ph1() {
-    printf("In tcommit! \r\n");
+    LCG_PRINTF("In tcommit! \r\n");
     // check for new stuff to add to tx buf from tsk buf
     if(!num_tbe)
         return;
@@ -144,7 +144,7 @@ void tcommit_ph1() {
                       task_dirty_buf_size[i]);
             if(!tx_dst) {
                 // Error! We ran out of space in tx buf
-                printf("Out of space!\r\n");
+                LCG_PRINTF("Out of space!\r\n");
                 while(1);
                 return;
             }
@@ -192,7 +192,7 @@ void tx_commit() {
     // Copy all tx buff entries to main memory
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
-        printf("Copying from %x to %x \r\n", tx_dirty_src[num_dtxv-1],
+        LCG_PRINTF("Copying from %x to %x \r\n", tx_dirty_src[num_dtxv-1],
           tx_dirty_dst[num_dtxv - 1]);
         memcpy( tx_dirty_src[num_dtxv -1],
                 tx_dirty_dst[num_dtxv - 1],
@@ -208,11 +208,11 @@ void tx_commit() {
           conflict |= compare_filters(read_filters + THREAD, write_filters +
           EV);
           if(!conflict){
-              printf("committing event accesses!\r\n");
+              LCG_PRINTF("committing event accesses!\r\n");
               ev_commit();
           }
           else{
-              printf("Conflict! Cannot commit\r\n");
+              LCG_PRINTF("Conflict! Cannot commit\r\n");
           }
     }
     // zeroing need_tx_commit MUST come after removing in_tx condition since we

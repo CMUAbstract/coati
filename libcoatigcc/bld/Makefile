@@ -1,5 +1,7 @@
 LIB = libcoatigcc
 
+export LIBCOATIGCC_ENABLE_DIAGNOSTICS = 0
+
 include ../Makefile.config
 
 OBJECTS += \
