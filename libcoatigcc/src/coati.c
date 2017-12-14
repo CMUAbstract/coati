@@ -139,7 +139,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             // Not in tsk buf, so check event buf
             index = evfind(addr);
             if(index > -1) {
-                dst = ev_dirty_dst[index];
+               dst = ev_dirty_dst[index];
             }
             // Not in tx buf either, so add to filter and return main memory addr
             else {
@@ -149,9 +149,12 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             break;
         case NORMAL:
             if(index > -1) {
+                LCG_PRINTF("Found addr %x at buf dst %x\r\n",
+                            addr,task_dirty_buf_dst[index]);
                 dst = task_dirty_buf_dst[index];
             }
             else {
+                LCG_PRINTF("Addr %x not in buffer \r\n", addr);
                 dst = addr;
             }
             break;

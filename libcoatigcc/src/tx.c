@@ -190,10 +190,13 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
 void tx_commit() {
     // TODO insert check for serialize after-before
     // Copy all tx buff entries to main memory
+    LCG_PRINTF("In tx_commit!\r\n");
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
-        LCG_PRINTF("Copying from %x to %x \r\n", tx_dirty_src[num_dtxv-1],
-          tx_dirty_dst[num_dtxv - 1]);
+        LCG_PRINTF("Copying %x from %x to %x \r\n", 
+                    *((uint16_t *)tx_dirty_dst[num_dtxv - 1]),
+                    tx_dirty_dst[num_dtxv - 1],
+                    tx_dirty_src[num_dtxv-1]);
         memcpy( tx_dirty_src[num_dtxv -1],
                 tx_dirty_dst[num_dtxv - 1],
                 tx_dirty_size[num_dtxv - 1]
@@ -202,18 +205,21 @@ void tx_commit() {
     }
     // Now compare filters to see if we can safely merge in any ongoing events
     if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit){
-          int conflict = 0;
-          conflict = compare_filters(read_filters + EV, read_filters + THREAD);
-          conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
-          conflict |= compare_filters(read_filters + THREAD, write_filters +
-          EV);
-          if(!conflict){
-              LCG_PRINTF("committing event accesses!\r\n");
-              ev_commit();
-          }
-          else{
-              LCG_PRINTF("Conflict! Cannot commit\r\n");
-          }
+        int conflict = 0;
+        conflict = compare_filters(read_filters + EV, read_filters + THREAD);
+        conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
+        conflict |= compare_filters(read_filters + THREAD, write_filters +
+        EV);
+        if(!conflict){
+            LCG_PRINTF("committing event accesses!\r\n");
+            ev_commit();
+        }
+        else{
+            LCG_PRINTF("Conflict! Cannot commit\r\n");
+        }
+    }
+    else {
+        LCG_PRINTF("No concurrent event \r\n");
     }
     // zeroing need_tx_commit MUST come after removing in_tx condition since we
     // perform tx_commit based on the need_tx_commit flag
