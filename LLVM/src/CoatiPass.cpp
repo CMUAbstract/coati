@@ -24,6 +24,7 @@ static Function *internal_memcpy_func;
 
 /** @brief Replace a memcpy() call to one of our memcpy functions */
 void replaceMemcpy(CallInst *I, acc_type_t acc_type) {
+  LLVMContext context;
 #ifdef _COATI_PASS_DEBUG
   errs() << "Replacing Memcpy: " << acc_type << "\n";
   I->dump();
@@ -40,11 +41,11 @@ void replaceMemcpy(CallInst *I, acc_type_t acc_type) {
   IRBuilder<> builder(I);
   std::vector<Value *> args;
   args.push_back(new BitCastInst(I->getArgOperand(0),
-        Type::getInt16PtrTy(getGlobalContext()), "dest", I));
+        Type::getInt16PtrTy(context), "dest", I));
   args.push_back(new BitCastInst(I->getArgOperand(1),
-        Type::getInt16PtrTy(getGlobalContext()), "src", I));
+        Type::getInt16PtrTy(context), "src", I));
   args.push_back(new BitCastInst(I->getArgOperand(2),
-        Type::getInt16Ty(getGlobalContext()), "num", I));
+        Type::getInt16Ty(context), "num", I));
 
   Value *call = builder.CreateCall(func, ArrayRef<Value *>(args));
   I->replaceAllUsesWith(call);
@@ -72,44 +73,45 @@ namespace {
      *         in module M and initialize static variables
      */
     void declareFuncs(Module *M) {
+      LLVMContext context;
       Constant *r = M->getOrInsertFunction("read",
-          FunctionType::getInt16PtrTy(getGlobalContext()), // Returns void *
-          Type::getInt16PtrTy(getGlobalContext()), // void *addr
-          Type::getInt16Ty(getGlobalContext()), // unsigned size
-          Type::getInt16Ty(getGlobalContext()), // acc_type acc
+          FunctionType::getInt16PtrTy(context), // Returns void *
+          Type::getInt16PtrTy(context), // void *addr
+          Type::getInt16Ty(context), // unsigned size
+          Type::getInt16Ty(context), // acc_type acc
           NULL);
       read_func = cast<Function>(r);
 
       Constant *w = M->getOrInsertFunction("write",
-          FunctionType::getVoidTy(getGlobalContext()), // returns Void
-          Type::getInt16PtrTy(getGlobalContext()), // void *addr
-          Type::getInt16Ty(getGlobalContext()), // unsigned size
-          Type::getInt16Ty(getGlobalContext()), // acc_type acc
-          Type::getInt16Ty(getGlobalContext()), // unsigned value
+          FunctionType::getVoidTy(context), // returns Void
+          Type::getInt16PtrTy(context), // void *addr
+          Type::getInt16Ty(context), // unsigned size
+          Type::getInt16Ty(context), // acc_type acc
+          Type::getInt16Ty(context), // unsigned value
           NULL);
       write_func = cast<Function>(w);
 
       Constant *tx = M->getOrInsertFunction("tx_memcpy",
-          FunctionType::getVoidTy(getGlobalContext()), // returns void
-          Type::getInt16PtrTy(getGlobalContext()), // void *dest
-          Type::getInt16PtrTy(getGlobalContext()), // void *src
-          Type::getInt16Ty(getGlobalContext()), // size_t num
+          FunctionType::getVoidTy(context), // returns void
+          Type::getInt16PtrTy(context), // void *dest
+          Type::getInt16PtrTy(context), // void *src
+          Type::getInt16Ty(context), // size_t num
           NULL);
       tx_memcpy_func = cast<Function>(tx);
 
       Constant *event = M->getOrInsertFunction("event_memcpy",
-          FunctionType::getVoidTy(getGlobalContext()), // returns void
-          Type::getInt16PtrTy(getGlobalContext()), // void *dest
-          Type::getInt16PtrTy(getGlobalContext()), // void *src
-          Type::getInt16Ty(getGlobalContext()), // size_t num
+          FunctionType::getVoidTy(context), // returns void
+          Type::getInt16PtrTy(context), // void *dest
+          Type::getInt16PtrTy(context), // void *src
+          Type::getInt16Ty(context), // size_t num
           NULL);
       event_memcpy_func = cast<Function>(event);
 
       Constant *intern = M->getOrInsertFunction("internal_memcpy",
-          FunctionType::getVoidTy(getGlobalContext()), // returns void
-          Type::getInt16PtrTy(getGlobalContext()), // void *dest
-          Type::getInt16PtrTy(getGlobalContext()), // void *src
-          Type::getInt16Ty(getGlobalContext()), // size_t num
+          FunctionType::getVoidTy(context), // returns void
+          Type::getInt16PtrTy(context), // void *dest
+          Type::getInt16PtrTy(context), // void *src
+          Type::getInt16Ty(context), // size_t num
           NULL);
       internal_memcpy_func = cast<Function>(intern);
     }
@@ -119,21 +121,22 @@ namespace {
      */
     void replaceRead(LoadInst *I, unsigned acc_type) {
       std::vector<Value *> args;
+      LLVMContext context;
 
       Value *size = ConstantInt::get(
-          Type::getInt16Ty(getGlobalContext()),
+          Type::getInt16Ty(context),
           I->getAlignment(), false);
 
       Value *acc = ConstantInt::get(
-          Type::getInt16Ty(getGlobalContext()), acc_type, false);
+          Type::getInt16Ty(context), acc_type, false);
 
       // Assemble arguments to read()
       args.push_back(new BitCastInst(I->getPointerOperand(),
-          Type::getInt16PtrTy(getGlobalContext()), "addr", I));
+          Type::getInt16PtrTy(context), "addr", I));
       args.push_back(new BitCastInst(size,
-            Type::getInt16Ty(getGlobalContext()), "size", I));
+            Type::getInt16Ty(context), "size", I));
       args.push_back(new BitCastInst(acc,
-            Type::getInt16Ty(getGlobalContext()), "acc", I));
+            Type::getInt16Ty(context), "acc", I));
 
       IRBuilder<> builder(I);
       CallInst *call = builder.CreateCall(read_func, ArrayRef<Value *>(args));
@@ -151,21 +154,22 @@ namespace {
     void replaceWrite(StoreInst *I, unsigned acc_type) {
       IRBuilder<> builder(I);
       std::vector<Value *> args;
+      LLVMContext context;
 
       Value *size = ConstantInt::get(
-          Type::getInt16Ty(getGlobalContext()), I->getAlignment(), false);
+          Type::getInt16Ty(context), I->getAlignment(), false);
       Value *acc = ConstantInt::get(
-          Type::getInt16Ty(getGlobalContext()), acc_type, false);
+          Type::getInt16Ty(context), acc_type, false);
 
       // Assemble arguements to write()
       args.push_back(new BitCastInst(I->getPointerOperand(),
-          Type::getInt16PtrTy(getGlobalContext()), "addr", I));
+          Type::getInt16PtrTy(context), "addr", I));
       args.push_back(new BitCastInst(size,
-          Type::getInt16Ty(getGlobalContext()), "size", I));
+          Type::getInt16Ty(context), "size", I));
       args.push_back(new BitCastInst(acc,
-          Type::getInt16Ty(getGlobalContext()), "acc", I));
+          Type::getInt16Ty(context), "acc", I));
       args.push_back(CastInst::CreateIntegerCast(I->getValueOperand(),
-          Type::getInt16Ty(getGlobalContext()), false, "val", I));
+          Type::getInt16Ty(context), false, "val", I));
 
       Value *call = builder.CreateCall(write_func, ArrayRef<Value *>(args));
       I->replaceAllUsesWith(call);
