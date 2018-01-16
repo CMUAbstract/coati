@@ -29,8 +29,22 @@ __nv tx_state state_1 = {0};
 __nv tx_state state_0 = {
     .num_dtxv = 0,
     .in_tx = 0,
-    .tx_need_commit = 0
+    .tx_need_commit = 0,
+    .serialize_after = 0
 };
+
+/*
+ * @brief sets the serialize after bit
+ * @comments This makes the transaction will serialize after any concurrent
+ * events. This bit also has to be cleared on transaction commit so future
+ * transactions that _don't_ set this bit will be ok. We're adding the update in
+ * this faction so it's compatible with all the code that's been written
+ * already.
+ */
+void set_serialize_after() {
+    ((tx_state *)(curctx->extra_state))->serialize_after = 1;
+}
+
 
 /*
  * @brief initializes state for a new tx
@@ -182,15 +196,13 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
     return (void *) new_ptr;
 }
 
-
-
 /*
- * @brief write back to source on transaction commit
+ * @brief an internal function for committing if the transaction is defined as
+ * serialize before (the default)
  */
-void tx_commit() {
-    // TODO insert check for serialize after-before
+static void tx_commit_txsb() {
     // Copy all tx buff entries to main memory
-    LCG_PRINTF("In tx_commit!\r\n");
+    LCG_PRINTF("In tx_commit ser before!\r\n");
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
         LCG_PRINTF("Copying %x from %x to %x \r\n", 
@@ -206,10 +218,9 @@ void tx_commit() {
     // Now compare filters to see if we can safely merge in any ongoing events
     if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit){
         int conflict = 0;
-        conflict = compare_filters(read_filters + EV, read_filters + THREAD);
+        // Only a conflict if event read a value written by the transaction
+        // since in all other cases we can serialize the tx before the event
         conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
-        conflict |= compare_filters(read_filters + THREAD, write_filters +
-        EV);
         if(!conflict){
             LCG_PRINTF("committing event accesses!\r\n");
             ev_commit();
@@ -221,8 +232,79 @@ void tx_commit() {
     else {
         LCG_PRINTF("No concurrent event \r\n");
     }
+}
+
+/*
+ * @brief an internal function for committing if the transaction is defined as
+ * serialize after
+ * @comments my apologies for the spaghetti code, this function does have
+ * multiple exit points...
+ */
+static void tx_commit_txsa() {
+    LCG_PRINTF("In tx_commit ser after!\r\n");
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit){
+        // Commit event accesses back to main memory
+        LCG_PRINTF("committing event accesses!\r\n");
+        ev_commit();
+
+        // Now compare filters to see if any tx read a value written by the
+        // concurrent event(s), making it impossible to serialize after
+        int conflict = 0;
+        conflict |= compare_filters(read_filters + THREAD, write_filters +
+        EV);
+        if(conflict){
+            LCG_PRINTF("Conflict! Must rollback transaction\r\n");
+            // Resetting the curctx task so we go back to the top of the tx
+            // We won't set any other state here for clarity since we don't
+            // touch it in the other commit function, but we do risk some
+            // pathological cases where you slosh back and forth between
+            // checking for conflicts and restarting the transaction. Clearing
+            // the tx_need_commit flag would probably help, but also makes
+            // things more confusing IMHO.
+            curctx->task = cur_tx_start;
+
+            return;
+        }
+        else{
+            LCG_PRINTF("Continuing to tx commit! \r\n");
+        }
+    }
+    else {
+        LCG_PRINTF("No concurrent event \r\n");
+    }
+    // Copy all tx buff entries to main memory
+    while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
+        uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
+        LCG_PRINTF("Copying %x from %x to %x \r\n", 
+                    *((uint16_t *)tx_dirty_dst[num_dtxv - 1]),
+                    tx_dirty_dst[num_dtxv - 1],
+                    tx_dirty_src[num_dtxv-1]);
+        memcpy( tx_dirty_src[num_dtxv -1],
+                tx_dirty_dst[num_dtxv - 1],
+                tx_dirty_size[num_dtxv - 1]
+        );
+        ((tx_state *)(curctx->extra_state))->num_dtxv--;
+    }
+}
+
+/*
+ * @brief write back to source on transaction commit
+ */
+void tx_commit() {
+    
+    // Choose correct commit function depending on serialize condition in tx
+    if(((tx_state *)(curctx->extra_state))->serialize_after == 0) {
+      tx_commit_txsb();
+    }
+    else {
+      tx_commit_txsa();
+    }
+
     // zeroing need_tx_commit MUST come after removing in_tx condition since we
     // perform tx_commit based on the need_tx_commit flag
+    // But we clear the serialize after flag before in_tx so that we're
+    // guaranteed to clear it now that we're done committing
+    ((tx_state *)(curctx->extra_state))->serialize_after = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 0;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
     ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= 0;

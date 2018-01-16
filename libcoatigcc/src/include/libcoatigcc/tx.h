@@ -10,16 +10,25 @@ typedef struct _tx_state {
     uint16_t num_dtxv;
     uint8_t in_tx;
     uint8_t tx_need_commit;
+    uint8_t serialize_after;
 } tx_state;
 
+// Used INSIDE a task before any application code (aka not power manipulation
+// code from libcapybara etc) to indicate the start of a transaction
 #define TX_BEGIN \
     tx_begin();
 
+// Used at ALL exit points of the last task in a transaction
 #define TX_END \
     tx_end();
 
-//#define TX_BEGIN() __attribute((annotate("tx_begin")))
-//#define TX_END()__attribute((annotate("tx_end")))
+// Place immediately after TX_BEGIN in the first task of a transaction where the
+// TX will serialize after any concurrent events. Default behavior will
+// serialize the TX before the event and throw out the effects of the event if
+// it conflicts with the transaction
+#define SERIALIZE_AFTER \
+    set_serialize_after();
+
 #define TX_ST_SYM_NAME(name) _tx_state_ ## name
 
 #define TX_ST_REF(name) \

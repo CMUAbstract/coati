@@ -325,7 +325,7 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
 
 
 /**
- * @brief Function to be invoked at the beginning of every task
+ * @brief Function to be invoked before transferring control to a new task
  */
 void task_prologue()
 {
