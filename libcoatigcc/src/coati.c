@@ -112,7 +112,11 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
     else {
         new_ptr = (uint16_t) task_dirty_buf;
     }
+    LCG_PRINTF("Writing to %x, buf = %x, num_tbe = %x \r\n", new_ptr,
+        task_dirty_buf, num_tbe);
     if(new_ptr + size > (unsigned) (task_dirty_buf + BUF_SIZE)) {
+        LCG_PRINTF("Returning null! %x > %x \r\n",
+            new_ptr + size,(unsigned) (task_dirty_buf + BUF_SIZE));
         return NULL;
     }
     else {
@@ -240,7 +244,7 @@ void write_word(void *addr, uint16_t value) {
 
 void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
     int index;
-    LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
+    //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
     index = find(addr);
     switch(acc) {
         case EVENT:
@@ -265,6 +269,7 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
                 }
                 else {
                     // Error! we ran out of space
+                    LCG_PRINTF("Ev Error! out of space!\r\n");
                     while(1);
                 }
             }
@@ -290,6 +295,7 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
                 }
                 else {
                     // Error! we ran out of space
+                    LCG_PRINTF("Error! out of space!\r\n");
                     while(1);
                 }
             }
@@ -326,6 +332,9 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
 
 /**
  * @brief Function to be invoked before transferring control to a new task
+ * @comments tricky change: tx commit can now manipulate curctx->task to get
+ * back to the start of a transaction if it's rolling back, so yeah, take that
+ * into consideration
  */
 void task_prologue()
 {
@@ -430,6 +439,7 @@ int main() {
     //       support)
     // transition_to(curtask);
     LCG_PRINTF("transitioning to %x \r\n",curctx->task->func);
+    LCG_PRINTF("tsk size = %i tx size = %i \r\n", NUM_DIRTY_ENTRIES, BUF_SIZE);
 
     task_prologue();
 

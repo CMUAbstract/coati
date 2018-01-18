@@ -9,8 +9,18 @@
 #include "repeat.h"
 
 #define TASK_NAME_SIZE 32
-#define NUM_DIRTY_ENTRIES 16
-#define BUF_SIZE 32
+
+#ifndef LIBCOATIGCC_PER_TSK_BUF_SIZE
+  #define NUM_DIRTY_ENTRIES 16
+#else
+  #define NUM_DIRTY_ENTRIES LIBCOATIGCC_PER_TSK_BUF_SIZE
+#endif
+
+#ifndef LIBCOATIGCC_CTX_BUF_SIZE
+  #define BUF_SIZE 32
+#else
+  #define BUF_SIZE LIBCOATIGCC_CTX_BUF_SIZE
+#endif
 
 typedef void (task_func_t)(void);
 typedef uint32_t task_mask_t;

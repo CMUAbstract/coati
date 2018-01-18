@@ -8,6 +8,12 @@
 #define LCG_PRINTF printf
 #endif
 
+#ifndef LIBCOATIGCC_CONF_REPORT
+#define LCG_CONF_REP(...)
+#else
+#define LCG_CONF_REP printf
+#endif
+
 #include "coati.h"
 #include "tx.h"
 #include "filter.h"
@@ -222,11 +228,11 @@ static void tx_commit_txsb() {
         // since in all other cases we can serialize the tx before the event
         conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
         if(!conflict){
-            LCG_PRINTF("committing event accesses!\r\n");
+            LCG_CONF_REP("committing event accesses!\r\n");
             ev_commit();
         }
         else{
-            LCG_PRINTF("Conflict! Cannot commit\r\n");
+            LCG_CONF_REP("Conflict! Cannot commit\r\n");
         }
     }
     else {
@@ -253,7 +259,7 @@ static void tx_commit_txsa() {
         conflict |= compare_filters(read_filters + THREAD, write_filters +
         EV);
         if(conflict){
-            LCG_PRINTF("Conflict! Must rollback transaction\r\n");
+            LCG_CONF_REP("Conflict! Must rollback transaction\r\n");
             // Resetting the curctx task so we go back to the top of the tx
             // We won't set any other state here for clarity since we don't
             // touch it in the other commit function, but we do risk some
@@ -266,7 +272,7 @@ static void tx_commit_txsa() {
             return;
         }
         else{
-            LCG_PRINTF("Continuing to tx commit! \r\n");
+            LCG_CONF_REP("Continuing to tx commit! \r\n");
         }
     }
     else {
