@@ -293,6 +293,8 @@ void * ev_dirty_buf_alloc(void * addr, size_t size) {
         new_ptr = (uint16_t) ev_dirty_buf;
     }
     if(new_ptr + size > (unsigned) (ev_dirty_buf + BUF_SIZE)) {
+        LCG_PRINTF("asking for %u, only have %u \r\n", new_ptr + size,
+        (unsigned) (ev_dirty_buf + BUF_SIZE));
         return NULL;
     }
     else {

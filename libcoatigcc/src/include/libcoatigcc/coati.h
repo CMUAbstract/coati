@@ -144,7 +144,7 @@ void transition_to(task_t *task);
 #define TRANSITION_TO(task) transition_to(TASK_REF(task))
 
 void * read(const void * addr, unsigned size, acc_type acc);
-void  write(const void *addr, unsigned size, acc_type acc, unsigned value);
+void  write(const void *addr, unsigned size, acc_type acc, uint32_t value);
 int16_t find(const void *addr);
 void *internal_memcpy(void *dest, void *src, uint16_t num);
 

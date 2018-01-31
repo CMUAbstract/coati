@@ -33,9 +33,9 @@ __nv context_t * volatile context_ptr1 = &context_1;
 __nv volatile unsigned _numBoots = 0;
 
 // task dirty buffer data
-void * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
-void * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
-size_t task_dirty_buf_size[NUM_DIRTY_ENTRIES];
+__nv void * task_dirty_buf_src[NUM_DIRTY_ENTRIES];
+__nv void * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
+__nv size_t task_dirty_buf_size[NUM_DIRTY_ENTRIES];
 __nv uint8_t task_dirty_buf[BUF_SIZE];
 
 __nv void * task_commit_list_src[NUM_DIRTY_ENTRIES];
@@ -239,10 +239,9 @@ void write_word(void *addr, uint16_t value) {
 /*
  * @brief writes data from value pointer to address' location in task buf,
  * returns 0 if successful, -1 if allocation failed
- * @comments DEPRACATED
  */
 
-void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
+void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
     int index;
     //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
     index = find(addr);
@@ -254,8 +253,13 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
             if(index > -1) {
               if (size == sizeof(char)) {
                 *((uint8_t *) ev_dirty_dst[index]) = (uint8_t) value;
+              } else if(size == sizeof(unsigned)) {
+                *((unsigned *) ev_dirty_dst[index]) = (uint16_t) value;
+              } else if(size == sizeof(uint32_t)) {
+                *((uint32_t *) ev_dirty_dst[index]) = (uint32_t) value;
               } else {
-                *((unsigned *) ev_dirty_dst[index]) = value;
+                  LCG_PRINTF("Ev Error! invalid size!\r\n");
+                  while(1);
               }
             }
             else {
@@ -263,11 +267,15 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
                 if(dst) {
                   if (size == sizeof(char)) {
                     *((uint8_t *) dst) = (uint8_t) value;
+                  } else if(size == sizeof(uint16_t)) {
+                    *((unsigned *) dst) = (uint16_t) value;
+                  } else if(size == sizeof(uint32_t)) {
+                    *((uint32_t *) dst) = (uint32_t) value;
                   } else {
-                    *((unsigned *) dst) = value;
+                    LCG_PRINTF("Ev Error! invalid size!\r\n");
+                    while(1);
                   }
-                }
-                else {
+                } else {
                     // Error! we ran out of space
                     LCG_PRINTF("Ev Error! out of space!\r\n");
                     while(1);
@@ -280,8 +288,13 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
             if(index > -1) {
               if (size == sizeof(char)) {
                 *((uint8_t *) task_dirty_buf_dst[index]) = (uint8_t) value;
+              } else if (size == sizeof(uint16_t)) {
+                *((unsigned *) task_dirty_buf_dst[index]) = (uint16_t) value;
+              } else if (size == sizeof(uint32_t)) {
+                *((uint32_t *) task_dirty_buf_dst[index]) = (uint32_t) value;
               } else {
-                *((unsigned *) task_dirty_buf_dst[index]) = value;
+                    LCG_PRINTF("Ev Error! invalid size!\r\n");
+                    while(1);
               }
             }
             else {
@@ -289,8 +302,13 @@ void write(const void *addr, unsigned size, acc_type acc, unsigned value) {
                 if(dst) {
                   if (size == sizeof(char)) {
                     *((uint8_t *) dst) = (uint8_t) value;
+                  } else if (size == sizeof(uint16_t)) {
+                    *((unsigned *) dst) = (uint16_t) value;
+                  } else if (size == sizeof(uint32_t)) {
+                    *((uint32_t *) dst) = (uint32_t) value;
                   } else {
-                    *((unsigned *) dst) = value;
+                    LCG_PRINTF("Ev Error! invalid size!\r\n");
+                    while(1);
                   }
                 }
                 else {
