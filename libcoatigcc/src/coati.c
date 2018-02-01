@@ -108,6 +108,15 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
     if(num_tbe) {
         new_ptr = (uint16_t) task_dirty_buf_dst[num_tbe - 1] +
         task_dirty_buf_size[num_tbe - 1];
+        // Fix alignment struggles
+        if(size == 2) {
+          while(new_ptr & 0x1)
+            new_ptr++;
+        }
+        if(size == 2) {
+          while(new_ptr & 0x11)
+            new_ptr++;
+        }
     }
     else {
         new_ptr = (uint16_t) task_dirty_buf;
@@ -142,8 +151,14 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             //event access
             // Not in tsk buf, so check event buf
             index = evfind(addr);
+            LCG_PRINTF("ev index = %u \r\n", index);
             if(index > -1) {
                dst = ev_dirty_dst[index];
+              LCG_PRINTF("rd: index = %u, Found, Buffer vals: ", index);
+              for(int16_t i = 0; i < 8; i++) {
+                LCG_PRINTF("%x: ", ev_dirty_buf[i]);
+              }
+              LCG_PRINTF("\r\n");
             }
             // Not in tx buf either, so add to filter and return main memory addr
             else {
@@ -184,6 +199,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             // Error!
             while(1);
     }
+    LCG_PRINTF("Reading from %x \r\n",dst);
     return dst;
 }
 
@@ -251,16 +267,21 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             LCG_PRINTF("Running event write!\r\n");
             index = evfind(addr);
             if(index > -1) {
-              if (size == sizeof(char)) {
+              if (size == sizeof(uint8_t)) {
                 *((uint8_t *) ev_dirty_dst[index]) = (uint8_t) value;
-              } else if(size == sizeof(unsigned)) {
-                *((unsigned *) ev_dirty_dst[index]) = (uint16_t) value;
+              } else if(size == sizeof(uint16_t)) {
+                *((uint16_t *) (ev_dirty_dst[index] + 1) ) = (uint16_t) value;
               } else if(size == sizeof(uint32_t)) {
-                *((uint32_t *) ev_dirty_dst[index]) = (uint32_t) value;
+                *((uint32_t *) (ev_dirty_dst[index] + 3)) = (uint32_t) value;
               } else {
                   LCG_PRINTF("Ev Error! invalid size!\r\n");
                   while(1);
               }
+              LCG_PRINTF("index = %u, Found, Buffer vals: ", index);
+              for(int16_t i = 0; i < 8; i++) {
+                LCG_PRINTF("%x: ", ev_dirty_buf[i]);
+              }
+              LCG_PRINTF("\r\n");
             }
             else {
                 void * dst = ev_dirty_buf_alloc(addr, size);
@@ -268,7 +289,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                   if (size == sizeof(char)) {
                     *((uint8_t *) dst) = (uint8_t) value;
                   } else if(size == sizeof(uint16_t)) {
-                    *((unsigned *) dst) = (uint16_t) value;
+                    *((uint16_t *) dst) = (uint16_t) value;
                   } else if(size == sizeof(uint32_t)) {
                     *((uint32_t *) dst) = (uint32_t) value;
                   } else {
@@ -281,6 +302,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                     while(1);
                 }
             }
+            break;
         case TX:
             add_to_filter(write_filters + THREAD, (unsigned)addr);
             // Add to TX filter?

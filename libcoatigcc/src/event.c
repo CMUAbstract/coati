@@ -175,6 +175,7 @@ int16_t  evfind(const void * addr) {
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
+          //LCG_PRINTF("Checking %x \r\n",ev_dirty_src[i]);
           if(addr == ev_dirty_src[i])
               return i;
       }
@@ -282,15 +283,24 @@ void *event_memcpy(void *dest, void *src, uint16_t num) {
  */
 void * ev_dirty_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
-    LCG_PRINTF("In alloc! num_evbe = %i \r\n",num_evbe);
+    LCG_PRINTF("In alloc! num_evbe = %i, buf = %x\r\n",num_evbe, ev_dirty_buf);
     uint16_t num_vars = 0;
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
-        new_ptr = (uint16_t) ev_dirty_dst[num_vars - 1] +
+        new_ptr = (uint8_t *) ev_dirty_dst[num_vars - 1] +
         ev_dirty_size[num_vars - 1];
+        // Fix alignment struggles
+        if(size == 2) {
+          while(new_ptr & 0x1)
+            new_ptr++;
+        }
+        if(size == 2) {
+          while(new_ptr & 0x11)
+            new_ptr++;
+        }
     }
     else {
-        new_ptr = (uint16_t) ev_dirty_buf;
+        new_ptr = (uint8_t *) ev_dirty_buf;
     }
     if(new_ptr + size > (unsigned) (ev_dirty_buf + BUF_SIZE)) {
         LCG_PRINTF("asking for %u, only have %u \r\n", new_ptr + size,
@@ -300,7 +310,7 @@ void * ev_dirty_buf_alloc(void * addr, size_t size) {
     else {
         num_evbe++;
         num_vars++;
-        LCG_PRINTF("new src = %x new dst = %x index %i\r\n", addr, new_ptr,
+        LCG_PRINTF("ev new src = %x new dst = %x index %i\r\n", addr, new_ptr,
         num_vars);
         //(((ev_state *)(curctx->extra_ev_state))->num_devv)++;
         ev_dirty_src[num_vars - 1] = addr;
