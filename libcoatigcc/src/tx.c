@@ -314,7 +314,6 @@ void tx_commit() {
     ((tx_state *)(curctx->extra_state))->in_tx = 0;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
     ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= 0;
-    need_ev_commit = 0;
     need_tx_commit = 0;
 }
 

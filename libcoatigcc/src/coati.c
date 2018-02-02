@@ -433,7 +433,7 @@ void transition_to(task_t *next_task)
     }
 
     new_ev_state->in_ev = cur_ev_state->in_ev;
-    new_ev_state->ev_need_commit = need_ev_commit;
+    new_ev_state->ev_need_commit = cur_ev_state->ev_need_commit;
 
     new_tx_state->in_tx = cur_tx_state->in_tx;
     new_tx_state->tx_need_commit = need_tx_commit;
@@ -474,16 +474,14 @@ int main() {
 
     // Resume execution at the last task that started but did not finish
 
-    // TODO: using the raw transtion would be possible once the
-    //       prologue discussed in chain.h is implemented (requires compiler
-    //       support)
-    // transition_to(curtask);
     LCG_PRINTF("transitioning to %x \r\n",curctx->task->func);
     LCG_PRINTF("tsk size = %i tx size = %i \r\n", NUM_DIRTY_ENTRIES, BUF_SIZE);
 
     task_prologue();
 
-    // check for running event, disable all event interrupts if we're in one
+    // check for running event, disable all event interrupts if we're in one and
+    // make sure we finish the last event return if we got there and latched in
+    // the last evbe
     if(((ev_state *)curctx->extra_ev_state)->in_ev){
       _disable_events();
     }

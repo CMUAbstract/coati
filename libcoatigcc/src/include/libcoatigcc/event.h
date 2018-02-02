@@ -17,7 +17,6 @@ typedef struct _ev_state {
 } ev_state;
 
 extern volatile uint16_t num_evbe;
-extern volatile uint8_t need_ev_commit;
 
 extern ev_state state_ev_1;
 extern ev_state state_ev_0;
@@ -29,6 +28,7 @@ extern bloom_filter read_filters[NUM_PRIO_LEVELS];
 
 void event_return();
 void event_handler();
+void ev_commit_ph1();
 void ev_commit();
 
 int16_t  evfind(const void * addr);
@@ -76,6 +76,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
  */
 //#define EVENT() __attribute((annotate("event_begin")))
 #define EV_ST_SYM_NAME(name) _ev_state_ ## name
+#define EV_ST2_SYM_NAME(name) _ev_state_2 ## name
 
 /*
  * We need the name and number here to handle the two different objects we're
@@ -84,16 +85,25 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 #define EV_ST_REF(name) \
         &EV_ST_SYM_NAME(name)
 
+#define EV_ST2_REF(name) \
+        &EV_ST2_SYM_NAME(name)
+
 
 #define EVENT(index,name) \
-          void name(); \
-          __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
-          __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0}; \
-          __nv ev_state EV_ST_SYM_NAME(name) = {0,1,0};\
-          __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
-                                                    TX_ST_REF(name), \
-                                                    EV_ST_REF(name) \
-                                                  };
+        void name(); \
+        __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
+        __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0}; \
+        __nv ev_state EV_ST_SYM_NAME(name) = {0,1,0};\
+        __nv ev_state EV_ST2_SYM_NAME(name) = {0,1,0};\
+        __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
+                                                  TX_ST_REF(name), \
+                                                  EV_ST_REF(name) \
+                                                };
+
+// Macro to handle first and second phase of commit
+#define EVENT_RETURN(name) \
+        ev_commit_ph1(EV_ST_REF(name), EV_ST2_REF(name)); \
+        event_return();
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)
