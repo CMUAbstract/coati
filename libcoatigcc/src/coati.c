@@ -479,14 +479,18 @@ int main() {
 
     task_prologue();
 
-    // check for running event, disable all event interrupts if we're in one and
-    // make sure we finish the last event return if we got there and latched in
-    // the last evbe
+    // check for running event, disable all event interrupts
     if(((ev_state *)curctx->extra_ev_state)->in_ev){
       _disable_events();
+      // if we've latched the need_commit flag, that means we failed somewhere
+      // in ev_return, so finish ev_return
+      // Note, this function will transfer control to the threadctx->task
+      if(((ev_state *)curctx->extra_ev_state)->ev_need_commit == LOCAL_COMMIT) {
+        event_return();
+      }
     }
     else {
-      LCG_PRINTF("Main: Enabling events!\r\n");
+     // LCG_PRINTF("Main: Enabling events!\r\n");
       _enable_events();
     }
 

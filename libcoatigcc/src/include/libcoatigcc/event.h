@@ -10,6 +10,12 @@
 #define EV  1
 #define NUM_PRIO_LEVELS 2
 
+// Define the flavors of commit
+#define COMMIT_DONE 4
+#define FUTURE_COMMIT 3
+#define LOCAL_COMMIT 1
+#define NO_COMMIT 0
+
 typedef struct _ev_state {
     uint16_t num_devv;
     uint8_t in_ev;
@@ -28,7 +34,7 @@ extern bloom_filter read_filters[NUM_PRIO_LEVELS];
 
 void event_return();
 void event_handler();
-void ev_commit_ph1();
+void ev_commit_ph1(ev_state *, ev_state *);
 void ev_commit();
 
 int16_t  evfind(const void * addr);

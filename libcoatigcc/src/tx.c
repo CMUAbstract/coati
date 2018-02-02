@@ -222,7 +222,7 @@ static void tx_commit_txsb() {
         ((tx_state *)(curctx->extra_state))->num_dtxv--;
     }
     // Now compare filters to see if we can safely merge in any ongoing events
-    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit){
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == FUTURE_COMMIT){
         int conflict = 0;
         // Only a conflict if event read a value written by the transaction
         // since in all other cases we can serialize the tx before the event
@@ -248,7 +248,7 @@ static void tx_commit_txsb() {
  */
 static void tx_commit_txsa() {
     LCG_PRINTF("In tx_commit ser after!\r\n");
-    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit){
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == FUTURE_COMMIT){
         // Commit event accesses back to main memory
         LCG_PRINTF("committing event accesses!\r\n");
         ev_commit();
@@ -313,7 +313,7 @@ void tx_commit() {
     ((tx_state *)(curctx->extra_state))->serialize_after = 0;
     ((tx_state *)(curctx->extra_state))->in_tx = 0;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
-    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= 0;
+    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= NO_COMMIT;
     need_tx_commit = 0;
 }
 

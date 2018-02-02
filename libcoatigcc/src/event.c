@@ -68,21 +68,17 @@ unsigned djb(unsigned data){
 void event_handler(context_t *new_event_ctx) {
     // Disable all event interrupts
     _disable_events();
-   
+
     // Quick sanity check to make sure context hasn't been corrupted... if we're
     // here, it's DEFINITELY an event, so the in_ev bit had better be set.
     if(((ev_state *)new_event_ctx->extra_ev_state)->in_ev == 0){
       LCG_PRINTF("Error! event context corrupted, in_ev = 0\r\n");
       while(1);
     }
-    // Oh, and we should have handled the need_commit thing already. That needs
-    // to be zeroed in the event context, and if there are any events still
-    // kicking around since we're in a tx or something, the need commit flag in
-    // the threadctx will be set.
-    if(((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit == 1){
-      LCG_PRINTF("Error! event context corrupted, ev_commit = 1\r\n");
-      while(1);
-    }
+
+    // Clear commit flag for this context
+    // TODO add in some error checking
+    ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = NO_COMMIT;
 
     // Clear event buffer counters but don't turn on curctx->in_ev! If we died
     // after seeting that, events would continously be disabled and they'd never
@@ -117,17 +113,17 @@ void event_handler(context_t *new_event_ctx) {
  */
 void ev_commit_ph1(ev_state * ptr1, ev_state * ptr2) {
   ev_state *new_ev_state;
-  
+
   // Update number of dirty variables
-  new_ev_state = (curctx.extra_ev_state == ptr1) ? ptr2 : ptr1;
+  new_ev_state = (curctx->extra_ev_state == ptr1) ? ptr2 : ptr1;
   new_ev_state->num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv +
                                                                     num_evbe;
   // Set need commit flag
-  new_ev_state->ev_need_commit = 1;
-  
+  new_ev_state->ev_need_commit = LOCAL_COMMIT;
+
   // Set so we know we're in an event if we end up dying and rebooting.
   new_ev_state->in_ev = 1;
-  
+
   // Swap pointer
   curctx->extra_ev_state = new_ev_state;
   return;
@@ -140,7 +136,7 @@ void ev_commit_ph1(ev_state * ptr1, ev_state * ptr2) {
  */
 void event_return() {
   // We assume that ev_commit_ph1 has already been run successfully
-  
+
   // Figure out if there's an ongoing transaction
   if(((tx_state *)(thread_ctx->extra_state))->in_tx == 0) {
       LCG_PRINTF("Starting ev_commit\r\n");
@@ -148,9 +144,9 @@ void event_return() {
       ev_commit();
   }
   else {
-    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = 1;
+    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = FUTURE_COMMIT;
   }
-  
+
   // Complicated, gross swap to follow so we correctly handle the update to
   // num_devv
   tx_state *new_tx_state;
@@ -159,14 +155,14 @@ void event_return() {
   new_tx_state = (thread_ctx->extra_state == &state_0 ? &state_1 : &state_0);
   new_ev_state = (thread_ctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                   &state_ev_0);
-  
+
   //Copy over to the new buffer
   *new_tx_state =*((tx_state *)(thread_ctx->extra_state));
 
 
   // Update the number of dirty variables, otherwise leave the copies the same
   new_ev_state->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv;
-  new_ev_state->ev_need_commit = 
+  new_ev_state->ev_need_commit =
                       ((ev_state*)curctx->extra_ev_state)->ev_need_commit;
   new_ev_state->in_ev = 0;
   //LCG_PRINTF("Checking thread stuff\r\n");
@@ -277,7 +273,7 @@ void ev_commit() {
     LCG_PRINTF("Running ev_commit! should commit %u\r\n", 
     ((ev_state*)(curctx->extra_ev_state))->num_devv/* + num_evbe*/);
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
-        num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
+        uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
         LCG_PRINTF("Copying %i th time from %x to %x \r\n", num_devv-1,
         ev_dirty_src[num_devv-1],
         ev_dirty_dst[num_devv - 1]);
@@ -287,7 +283,7 @@ void ev_commit() {
         );
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
-    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = 0;
+    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = COMMIT_DONE;
 }
 
 void *event_memcpy(void *dest, void *src, uint16_t num) {
