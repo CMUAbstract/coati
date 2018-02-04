@@ -76,6 +76,7 @@ void commit_ph2() {
     // Copy all commit list entries
     while(num_dtv > 0)  {
       // Copy from dst in tsk buf to "home" for that variable
+      LCG_PRINTF("Copying to %x\r\n",task_commit_list_dst[num_dtv-1]);
       memcpy( task_commit_list_src[num_dtv - 1],
               task_commit_list_dst[num_dtv - 1],
               task_commit_list_size[num_dtv - 1]
@@ -113,7 +114,8 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
           while(new_ptr & 0x1)
             new_ptr++;
         }
-        if(size == 2) {
+        if(size == 4) {
+          LCG_PRINTF("allocing 32 bit!\r\n");
           while(new_ptr & 0x11)
             new_ptr++;
         }
@@ -196,6 +198,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             break;
         default:
+            LCG_PRINTF("No valid type for read!\r\n");
             // Error!
             while(1);
     }
@@ -260,7 +263,6 @@ void write_word(void *addr, uint16_t value) {
 void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
     int index;
     //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
-    index = find(addr);
     switch(acc) {
         case EVENT:
             add_to_filter(write_filters + EV, (unsigned) addr);
@@ -270,9 +272,9 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               if (size == sizeof(uint8_t)) {
                 *((uint8_t *) ev_dirty_dst[index]) = (uint8_t) value;
               } else if(size == sizeof(uint16_t)) {
-                *((uint16_t *) (ev_dirty_dst[index] + 1) ) = (uint16_t) value;
+                *((uint16_t *) (ev_dirty_dst[index]) ) = (uint16_t) value;
               } else if(size == sizeof(uint32_t)) {
-                *((uint32_t *) (ev_dirty_dst[index] + 3)) = (uint32_t) value;
+                *((uint32_t *) (ev_dirty_dst[index])) = (uint32_t) value;
               } else {
                   LCG_PRINTF("Ev Error! invalid size!\r\n");
                   while(1);
@@ -307,6 +309,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             add_to_filter(write_filters + THREAD, (unsigned)addr);
             // Add to TX filter?
         case NORMAL:
+            index = find(addr);
             if(index > -1) {
               if (size == sizeof(char)) {
                 *((uint8_t *) task_dirty_buf_dst[index]) = (uint8_t) value;
@@ -341,6 +344,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             }
             break;
         default:
+            LCG_PRINTF("Invalid type for write!\r\n");
             // Error!
             while(1);
     }

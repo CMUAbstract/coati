@@ -327,7 +327,7 @@ void * ev_dirty_buf_alloc(void * addr, size_t size) {
           while(new_ptr & 0x1)
             new_ptr++;
         }
-        if(size == 2) {
+        if(size == 4) {
           while(new_ptr & 0x11)
             new_ptr++;
         }
