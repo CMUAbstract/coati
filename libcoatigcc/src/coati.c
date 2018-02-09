@@ -186,6 +186,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             else {
                 // Not in tsk buf, so check tx buf
+                LCG_PRINTF("Checking tx buf\r\n");
                 index = tfind(addr);
                 if(index > -1) {
                     dst = tx_dirty_dst[index];

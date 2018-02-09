@@ -186,6 +186,15 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
     if(num_txbe) {
         new_ptr = (uint16_t) tx_dirty_dst[num_txbe - 1] +
         tx_dirty_size[num_txbe - 1];
+        // Fix alignment struggles
+        if(size == 2) {
+          while(new_ptr & 0x1)
+            new_ptr++;
+        }
+        if(size == 4) {
+          while(new_ptr & 0x11)
+            new_ptr++;
+        }
     }
     else {
         new_ptr = (uint16_t) tx_dirty_buf;
