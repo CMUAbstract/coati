@@ -198,7 +198,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             break;
         default:
-            LCG_PRINTF("No valid type for read!\r\n");
+            printf("No valid type for read!\r\n");
             // Error!
             while(1);
     }
@@ -276,7 +276,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               } else if(size == sizeof(uint32_t)) {
                 *((uint32_t *) (ev_dirty_dst[index])) = (uint32_t) value;
               } else {
-                  LCG_PRINTF("Ev Error! invalid size!\r\n");
+                  printf("Ev Error! invalid size!\r\n");
                   while(1);
               }
               LCG_PRINTF("index = %u, Found, Buffer vals: ", index);
@@ -295,12 +295,12 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                   } else if(size == sizeof(uint32_t)) {
                     *((uint32_t *) dst) = (uint32_t) value;
                   } else {
-                    LCG_PRINTF("Ev Error! invalid size!\r\n");
+                    printf("Ev Error! invalid size!\r\n");
                     while(1);
                   }
                 } else {
                     // Error! we ran out of space
-                    LCG_PRINTF("Ev Error! out of space!\r\n");
+                    printf("Ev Error! out of space!\r\n");
                     while(1);
                 }
             }
@@ -318,7 +318,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               } else if (size == sizeof(uint32_t)) {
                 *((uint32_t *) task_dirty_buf_dst[index]) = (uint32_t) value;
               } else {
-                    LCG_PRINTF("Ev Error! invalid size!\r\n");
+                    printf("Error! invalid size!\r\n");
                     while(1);
               }
             }
@@ -332,19 +332,19 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                   } else if (size == sizeof(uint32_t)) {
                     *((uint32_t *) dst) = (uint32_t) value;
                   } else {
-                    LCG_PRINTF("Ev Error! invalid size!\r\n");
+                    printf("Error! invalid size!\r\n");
                     while(1);
                   }
                 }
                 else {
                     // Error! we ran out of space
-                    LCG_PRINTF("Error! out of space!\r\n");
+                    printf("Error! out of space!\r\n");
                     while(1);
                 }
             }
             break;
         default:
-            LCG_PRINTF("Invalid type for write!\r\n");
+            printf("Invalid type for write!\r\n");
             // Error!
             while(1);
     }

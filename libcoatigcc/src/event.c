@@ -72,7 +72,7 @@ void event_handler(context_t *new_event_ctx) {
     // Quick sanity check to make sure context hasn't been corrupted... if we're
     // here, it's DEFINITELY an event, so the in_ev bit had better be set.
     if(((ev_state *)new_event_ctx->extra_ev_state)->in_ev == 0){
-      LCG_PRINTF("Error! event context corrupted, in_ev = 0\r\n");
+      printf("Error! event context corrupted, in_ev = 0\r\n");
       while(1);
     }
 
@@ -184,7 +184,7 @@ void event_return() {
   else {
     //Error! thread_ctx should always be one of the contexts established in
     //coati.c
-    LCG_PRINTF("Error! got knocked out of correct ptrs!");
+    printf("Error! got knocked out of correct ptrs!");
     while(1);
   }
 
@@ -252,7 +252,7 @@ void evcommit_ph1() {
                       task_dirty_buf_size[i]);
             if(!ev_dst) {
                 // Error! We ran out of space in tx buf
-                LCG_PRINTF("Out of event space!\r\n");
+                printf("Out of event space!\r\n");
                 while(1);
                 return;
             }
@@ -270,7 +270,7 @@ void evcommit_ph1() {
  */
 void ev_commit() {
     // Copy all tx buff entries to main memory
-    LCG_PRINTF("Running ev_commit! should commit %u\r\n", 
+    LCG_PRINTF("Running ev_commit! should commit %u\r\n",
     ((ev_state*)(curctx->extra_ev_state))->num_devv/* + num_evbe*/);
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
         uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;

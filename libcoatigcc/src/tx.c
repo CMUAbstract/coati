@@ -164,7 +164,7 @@ void tcommit_ph1() {
                       task_dirty_buf_size[i]);
             if(!tx_dst) {
                 // Error! We ran out of space in tx buf
-                LCG_PRINTF("Out of space!\r\n");
+                printf("Out of space!\r\n");
                 while(1);
                 return;
             }
