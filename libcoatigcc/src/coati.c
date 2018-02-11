@@ -151,6 +151,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
         case EVENT:
             //TODO figure out if we can get rid of the extra search on each
             //event access
+            //printf("EV read: %x\r\n",addr);
             // Not in tsk buf, so check event buf
             index = evfind(addr);
             LCG_PRINTF("ev index = %u \r\n", index);
@@ -307,6 +308,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             }
             break;
         case TX:
+            //printf("TX write: %x\r\n",addr);
             add_to_filter(write_filters + THREAD, (unsigned)addr);
             // Add to TX filter?
         case NORMAL:

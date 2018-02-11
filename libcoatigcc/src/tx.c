@@ -14,6 +14,8 @@
 #define LCG_CONF_REP printf
 #endif
 
+//#define LCG_CONF_ALL printf
+
 #include "coati.h"
 #include "tx.h"
 #include "filter.h"
@@ -218,8 +220,14 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
 static void tx_commit_txsb() {
     // Copy all tx buff entries to main memory
     LCG_PRINTF("In tx_commit ser before!\r\n");
+#ifdef LCG_CONF_ALL
+    uint16_t num_dtxv_start = 0;
+#endif
     while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
         uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
+#ifdef LCG_CONF_ALL
+        num_dtxv_start = num_dtxv;
+#endif
         LCG_PRINTF("Copying %x from %x to %x \r\n", 
                     *((uint16_t *)tx_dirty_dst[num_dtxv - 1]),
                     tx_dirty_dst[num_dtxv - 1],
@@ -242,6 +250,20 @@ static void tx_commit_txsb() {
         }
         else{
             LCG_CONF_REP("Conflict! Cannot commit\r\n");
+            // For debugging, print off everything:
+#ifdef LCG_CONF_ALL
+            uint16_t num_devv = ((ev_state*)(curctx->extra_ev_state))->num_devv;
+            LCG_CONF_ALL("Event contents:\r\n");
+            for(uint16_t i = 0; i < num_devv ; i++) {
+              LCG_CONF_ALL("%x\t", ev_dirty_src[i]);
+            }
+            LCG_CONF_ALL("\r\n");
+            LCG_CONF_ALL("Tx contents:\r\n");
+            for(uint16_t i = 0; i < num_dtxv_start; i++) {
+              LCG_CONF_ALL("%x\t", tx_dirty_src[i]);
+            }
+            LCG_CONF_ALL("\r\n");
+#endif
         }
     }
     else {
@@ -306,7 +328,7 @@ static void tx_commit_txsa() {
  * @brief write back to source on transaction commit
  */
 void tx_commit() {
-    
+
     // Choose correct commit function depending on serialize condition in tx
     if(((tx_state *)(curctx->extra_state))->serialize_after == 0) {
       tx_commit_txsb();
@@ -315,6 +337,10 @@ void tx_commit() {
       tx_commit_txsa();
     }
 
+    // Safe to do this here since we're done committing everything, so any
+    // reruns of tx_commit_txs* will not do anything anyway.
+    clear_filter(write_filters + THREAD);
+    clear_filter(read_filters + THREAD);
     // zeroing need_tx_commit MUST come after removing in_tx condition since we
     // perform tx_commit based on the need_tx_commit flag
     // But we clear the serialize after flag before in_tx so that we're
@@ -323,6 +349,7 @@ void tx_commit() {
     ((tx_state *)(curctx->extra_state))->in_tx = 0;
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
     ((ev_state *)(curctx->extra_ev_state))->ev_need_commit= NO_COMMIT;
+
     need_tx_commit = 0;
 }
 

@@ -27,4 +27,5 @@ int compare_filters(bloom_filter *, bloom_filter *);
 
 void clear_filter(bloom_filter *);
 
+void print_filter(bloom_filter *);
 #endif //BLOOM_FILTER_H

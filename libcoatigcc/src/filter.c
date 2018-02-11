@@ -25,7 +25,8 @@ unsigned my_modulus(unsigned value_in, unsigned mod){
  */
 void add_to_filter(bloom_filter *filter, unsigned address){
 	unsigned key, key_byte, key_bit;
-	// apply all the hash functions
+	//printf("Add to filter\r\n");
+  // apply all the hash functions
 	bloom_hash *cur;
 	for(cur = filter->hash; cur; cur = cur->next){
 		key = (cur->func)(address);
@@ -33,10 +34,7 @@ void add_to_filter(bloom_filter *filter, unsigned address){
 	// print the filter values before modification
   #if 0
   printf("Filter values: ");
-	for(int i = FILTER_BYTES - 1; i > -1; i--){
-		printf("%x ",filter->bits[i]);
-	}
-	printf("\r\n");
+  print_filter(filter);
   #endif // 0
   // modulo number of buckets in the filter
 	key = my_modulus(key,filter->size);
@@ -45,13 +43,10 @@ void add_to_filter(bloom_filter *filter, unsigned address){
 	key_bit = key - (key_byte << 3);
 	filter->bits[key_byte] |= 1 << key_bit;
   #if 0
-  printf("%x %x %x \r\n",key, key_byte, key_bit);
+  //printf("%x %x %x \r\n",key, key_byte, key_bit);
 
 	printf("New filter values: ");
-	for(int i = FILTER_BYTES - 1; i > -1; i--){
-		printf("%x ",filter->bits[i]);
-	}
-	printf("\r\n");
+	print_filter(filter);
   #endif
 	return;
 }
@@ -65,15 +60,31 @@ int compare_filters(bloom_filter *A, bloom_filter *B){
 		return -1;
 	// cycle through each byte and compare
 	for(size_t i = 0; i < A->size >> 3; i++){
-		if(A->bits[i] & B->bits[i])
+		printf("A[%u] = %x B[%u] = %x\r\n",i,A->bits[i],i,B->bits[i]);
+    if(A->bits[i] & B->bits[i])
 			return 1;
 	}
 	return 0;
+}
+
+void print_filter(bloom_filter *filter) {
+  for(uint8_t i = 0; i < FILTER_BYTES;i++) {
+    printf("%x ",filter->bits[i]);
+  }
+  printf("\r\n");
+  return;
 }
 
 void clear_filter(bloom_filter *filter) {
     for(uint8_t i = 0; i < FILTER_BYTES;i++) {
       filter->bits[i] = 0;
     }
+#if 0
+    printf("Clear: ");
+    for(uint8_t i = 0; i < FILTER_BYTES;i++) {
+      printf("%x ",filter->bits[i]);
+    }
+    printf("\r\n");
+#endif
     return;
 }

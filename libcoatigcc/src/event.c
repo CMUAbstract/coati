@@ -283,6 +283,10 @@ void ev_commit() {
         );
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
+    // Safe to add this clear here because num_devv is down to 0 and commit is
+    // fully complete
+    clear_filter(read_filters + EV);
+    clear_filter(write_filters + EV);
     ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = COMMIT_DONE;
 }
 
