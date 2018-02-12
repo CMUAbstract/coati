@@ -146,7 +146,6 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
 void * read(const void *addr, unsigned size, acc_type acc) {
     int index;
     void * dst;
-    index = find(addr);
     switch(acc) {
         case EVENT:
             //TODO figure out if we can get rid of the extra search on each
@@ -170,6 +169,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             break;
         case NORMAL:
+            index = find(addr);
             if(index > -1) {
                 LCG_PRINTF("Found addr %x at buf dst %x\r\n",
                             addr,task_dirty_buf_dst[index]);
@@ -181,6 +181,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             break;
         case TX:
+            index = find(addr);
             // check tsk buf
             if(index > -1) {
                 dst = task_dirty_buf_dst[index];
