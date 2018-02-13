@@ -31,9 +31,6 @@ extern void *task_dirty_buf_src[];
 extern void *task_dirty_buf_dst[];
 extern size_t task_dirty_buf_size[];
 extern uint8_t task_dirty_buf[];
-extern void *task_commit_list_src[];
-extern void *task_commit_list_dst[];
-extern size_t task_commit_list_size[];
 
 
 extern uint16_t volatile num_tbe;

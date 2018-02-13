@@ -38,9 +38,6 @@ __nv void * task_dirty_buf_dst[NUM_DIRTY_ENTRIES];
 __nv size_t task_dirty_buf_size[NUM_DIRTY_ENTRIES];
 __nv uint8_t task_dirty_buf[BUF_SIZE];
 
-__nv void * task_commit_list_src[NUM_DIRTY_ENTRIES];
-__nv void * task_commit_list_dst[NUM_DIRTY_ENTRIES];
-__nv size_t task_commit_list_size[NUM_DIRTY_ENTRIES];
 
 // volatile number of task buffer entries that we want to clear on reboot
 volatile uint16_t num_tbe = 0;
@@ -54,32 +51,25 @@ static void commit_ph1();
 static void * task_dirty_buf_alloc(void *, size_t);
 
 /**
- * @brief Function that copies data to dirty list
+ * @brief Function that updates number of dirty variables in the persistent
+ * state
  */
 void commit_ph1() {
-    if(!num_tbe)
-        return;
-
-    for(int i = 0; i < num_tbe; i++) {
-        task_commit_list_src[i] = task_dirty_buf_src[i];
-        task_commit_list_dst[i] = task_dirty_buf_dst[i];
-        task_commit_list_size[i] = task_dirty_buf_size[i];
-    }
-
     num_dtv = num_tbe;
 }
 
 /**
- * @brief Function that copies data to main memory from the dirty list
+ * @brief Function that copies data to main memory from the task buffers
+ * @notes based on persistent var num_dtv
  */
 void commit_ph2() {
     // Copy all commit list entries
     while(num_dtv > 0)  {
       // Copy from dst in tsk buf to "home" for that variable
-      LCG_PRINTF("Copying to %x\r\n",task_commit_list_dst[num_dtv-1]);
-      memcpy( task_commit_list_src[num_dtv - 1],
-              task_commit_list_dst[num_dtv - 1],
-              task_commit_list_size[num_dtv - 1]
+      LCG_PRINTF("Copying to %x\r\n",task_dirty_buf_src[num_dtv-1]);
+      memcpy( task_dirty_buf_src[num_dtv - 1],
+              task_dirty_buf_dst[num_dtv - 1],
+              task_dirty_buf_size[num_dtv - 1]
             );
       num_dtv--;
     }
@@ -102,10 +92,10 @@ int16_t  find(const void * addr) {
 /*
  * @brief allocs space in buffer and returns a pointer to the spot, returns NULL
  * if buf is out of space
- * // TODO confirm that the index is at the byte and not the word level
  */
 void * task_dirty_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
+    // Totally valid to use volatile counter here on task level
     if(num_tbe) {
         new_ptr = (uint16_t) task_dirty_buf_dst[num_tbe - 1] +
         task_dirty_buf_size[num_tbe - 1];
@@ -146,6 +136,7 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
 void * read(const void *addr, unsigned size, acc_type acc) {
     int index;
     void * dst;
+    uint16_t read_cnt;
     switch(acc) {
         case EVENT:
             //TODO figure out if we can get rid of the extra search on each
@@ -153,6 +144,14 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             //printf("EV read: %x\r\n",addr);
             // Not in tsk buf, so check event buf
             index = evfind(addr);
+            read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
+            read_cnt += num_evread;
+            if(read_cnt >= NUM_DIRTY_ENTRIES) {
+              printf("Out of space in read list!\r\n");
+              while(1);
+            }
+            ev_read_list[read_cnt] = addr;
+            num_evread++;
             LCG_PRINTF("ev index = %u \r\n", index);
             if(index > -1) {
                dst = ev_dirty_dst[index];
@@ -164,7 +163,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             // Not in tx buf either, so add to filter and return main memory addr
             else {
-                add_to_filter(read_filters + EV,(unsigned)addr);
+                //add_to_filter(read_filters + EV,(unsigned)addr);
                 dst = addr;
             }
             break;
@@ -182,6 +181,14 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             break;
         case TX:
             index = find(addr);
+            read_cnt = ((tx_state *)curctx->extra_state)->num_read;
+            read_cnt += num_txread;
+            if(read_cnt >= NUM_DIRTY_ENTRIES) {
+              printf("Out of space in read buff!\r\n");
+              while(1);
+            }
+            tx_read_list[read_cnt] = addr;
+            num_txread++;
             // check tsk buf
             if(index > -1) {
                 dst = task_dirty_buf_dst[index];
@@ -195,7 +202,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 }
                 // Not in tx buf either, so add to filter and return main memory addr
                 else {
-                    add_to_filter(read_filters + THREAD,(unsigned)addr);
+                    // TODO make this a function
                     dst = addr;
                 }
             }
@@ -265,12 +272,21 @@ void write_word(void *addr, uint16_t value) {
 
 void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
     int index;
+    uint16_t write_cnt;
     //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
     switch(acc) {
         case EVENT:
-            add_to_filter(write_filters + EV, (unsigned) addr);
+            //add_to_filter(write_filters + EV, (unsigned) addr);
             LCG_PRINTF("Running event write!\r\n");
             index = evfind(addr);
+            write_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
+            write_cnt += num_evread;
+            if(write_cnt >= NUM_DIRTY_ENTRIES) {
+              printf("Out of space in write list!\r\n");
+              while(1);
+            }
+            ev_write_list[write_cnt] = addr;
+            num_evwrite++;
             if(index > -1) {
               if (size == sizeof(uint8_t)) {
                 *((uint8_t *) ev_dirty_dst[index]) = (uint8_t) value;
@@ -309,9 +325,15 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             }
             break;
         case TX:
-            //printf("TX write: %x\r\n",addr);
-            add_to_filter(write_filters + THREAD, (unsigned)addr);
-            // Add to TX filter?
+            write_cnt = ((tx_state *)curctx->extra_state)->num_write;
+            write_cnt += num_txwrite;
+            if(write_cnt >= NUM_DIRTY_ENTRIES) {
+              printf("Out of space in read buff!\r\n");
+              while(1);
+            }
+            tx_write_list[write_cnt] = addr;
+            num_txwrite++;
+            // Intentional fall through
         case NORMAL:
             index = find(addr);
             if(index > -1) {
@@ -388,15 +410,22 @@ void task_prologue()
 {
     LCG_PRINTF("Prologue: Checking if in tx: result = %i \r\n",
            ((tx_state *)curctx->extra_state)->in_tx);
-    commit_ph2();
+    
+    // check if we're committing a task inside a transaction
+    if(((tx_state *)curctx->extra_state)->in_tx) {
+      tx_inner_commit_ph2();
+    }
+    else {
+      commit_ph2();
+    }
     // Now check if there's a commit here
     if(((tx_state *)curctx->extra_state)->tx_need_commit) {
         LCG_PRINTF("Running tx commit!\r\n");
         tx_commit();
+        
     }
     // Clear all task buf entries before starting new task
     num_tbe = 0;
-
 }
 
 /**
@@ -412,29 +441,28 @@ void transition_to(task_t *next_task)
    // transition
     _disable_events();
     LCG_PRINTF("Disabled events");
+     
+    tx_state *cur_tx_state =(tx_state *)(curctx->extra_state);
+    ev_state *cur_ev_state =(ev_state *)(curctx->extra_ev_state);
 
     context_t *next_ctx; // this should be in a register for efficiency
                          // (if we really care, write this func in asm)
+    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
+    
     tx_state *new_tx_state;
-    ev_state *new_ev_state;
-    tx_state *cur_tx_state =(tx_state *)(curctx->extra_state);
-    ev_state *cur_ev_state =(ev_state *)(curctx->extra_ev_state);
-    // Copy all of the variables into the dirty buffer
-    // update the extra state objects
-    // update current task pointer
-    // reset stack pointer
-    // jump to next task
-
     new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+    
+    ev_state *new_ev_state;
     new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
-                    &state_ev_0);
+                    &state_ev_0);    
+
+    
     LCG_PRINTF("Transition Checking if in tx: result = %i, %i \r\n",cur_tx_state->in_tx,
            ((tx_state *)curctx->extra_state)->in_tx);
 
     if(cur_tx_state->in_tx) {
         LCG_PRINTF("Running tcommit phase 1\r\n");
-        tcommit_ph1();
-        new_tx_state->num_dtxv = cur_tx_state->num_dtxv + num_tbe;
+        tx_commit_ph1(new_tx_state);
     }
     else {
         commit_ph1();
@@ -446,8 +474,6 @@ void transition_to(task_t *next_task)
     new_tx_state->in_tx = cur_tx_state->in_tx;
     new_tx_state->tx_need_commit = need_tx_commit;
 
-
-    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
     next_ctx->extra_state = new_tx_state;
     next_ctx->extra_ev_state = new_ev_state;
     next_ctx->task = next_task;

@@ -19,6 +19,8 @@ __nv uint8_t ev_dirty_buf[BUF_SIZE];
 __nv void * ev_dirty_src[NUM_DIRTY_ENTRIES];
 __nv void * ev_dirty_dst[NUM_DIRTY_ENTRIES];
 __nv size_t ev_dirty_size[NUM_DIRTY_ENTRIES];
+__nv void * ev_read_list[NUM_DIRTY_ENTRIES];
+__nv void * ev_write_list[NUM_DIRTY_ENTRIES];
 
 __nv context_t * thread_ctx;
 __nv task_t * cur_tx_start;
@@ -31,35 +33,19 @@ __nv task_t * cur_tx_start;
  */
 static unsigned djb(unsigned data);
 volatile uint16_t num_evbe = 0;
-
-__nv bloom_hash hash = {&djb, NULL};
-__nv bloom_filter write_filters[NUM_PRIO_LEVELS]= {
-    {FILTER_SIZE, {0}, &hash},
-    {FILTER_SIZE, {0}, &hash}
-};
-
-__nv bloom_filter read_filters[NUM_PRIO_LEVELS]= {
-    {FILTER_SIZE, {0}, &hash},
-    {FILTER_SIZE, {0}, &hash}
-};
+volatile uint16_t num_evread = 0;
+volatile uint16_t num_evwrite = 0;
 
 __nv ev_state state_ev_1 = {0};
 __nv ev_state state_ev_0 = {
     .num_devv = 0,
+    .num_read = 0,
+    .num_write = 0,
     .in_ev = 0,
-    .ev_need_commit = 0
+    .ev_need_commit = COMMIT_DONE
 };
 
 
-/**
- * @brief the BYO hash function that we need for running the bloom filter
- */
-unsigned djb(unsigned data){
-    uint16_t hash = 5381;
-    hash = ((hash << 5) + hash) + (data & 0xFF00);
-    hash = ((hash << 5) + hash) + (data & 0x00FF);
-    return hash & 0xFFFF;
-}
 
 /*
  * @brief function to act as interrupt handler when an event interrupt is
@@ -84,6 +70,8 @@ void event_handler(context_t *new_event_ctx) {
     // after seeting that, events would continously be disabled and they'd never
     // get turned back on
     num_evbe = 0;
+    num_evread = 0;
+    num_evwrite = 0;
 
     // Pass across the number of variables in the ev buffer from the threadctx
     // to the active eventctx so that the next event can access the old
@@ -109,15 +97,19 @@ void event_handler(context_t *new_event_ctx) {
 
 /*
  * @brief function to atomically swap the need commit flag and the number of
- * entries to commit in the event_buffer
+ * entries to commit in the event_buffer and read/write lists
  */
 void ev_commit_ph1(ev_state * ptr1, ev_state * ptr2) {
   ev_state *new_ev_state;
 
-  // Update number of dirty variables
+  // Update number of dirty variables and read/write set lengths
   new_ev_state = (curctx->extra_ev_state == ptr1) ? ptr2 : ptr1;
   new_ev_state->num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv +
                                                                     num_evbe;
+  new_ev_state->num_read = ((ev_state *)(curctx->extra_ev_state))->num_read +
+                                                                    num_evread;
+  new_ev_state->num_write = ((ev_state *)(curctx->extra_ev_state))->num_write +
+                                                                    num_evwrite;
   // Set need commit flag
   new_ev_state->ev_need_commit = LOCAL_COMMIT;
 
@@ -159,8 +151,8 @@ void event_return() {
   //Copy over to the new buffer
   *new_tx_state =*((tx_state *)(thread_ctx->extra_state));
 
-
   // Update the number of dirty variables, otherwise leave the copies the same
+  new_ev_state->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv;
   new_ev_state->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv;
   new_ev_state->ev_need_commit =
                       ((ev_state*)curctx->extra_ev_state)->ev_need_commit;
@@ -229,41 +221,6 @@ void *  ev_get_dst(void * addr) {
     return NULL;
 }
 
-/*
- * DEPRACATED
- */
-void evcommit_ph1() {
-    // check for new stuff to add to tx buf from tsk buf
-    if(!num_tbe)
-        return;
-
-    for(int i = 0; i < num_tbe; i++) {
-        // Step in and find the tx_buf and change the spot where commit_ph2 will
-        // write back to
-        // TODO add in some optimizations here for when we're committing the
-        // transaction too. No need to write back to tx if committing after
-        // active task
-
-        // hunt for addr in tx buf and return new dst if it's in there
-        void *ev_dst = ev_get_dst(task_dirty_buf_src[i]);
-        if(!ev_dst) {
-            LCG_PRINTF("Running event buf alloc!\r\n");
-            ev_dst = tx_dirty_buf_alloc(task_dirty_buf_src[i],
-                      task_dirty_buf_size[i]);
-            if(!ev_dst) {
-                // Error! We ran out of space in tx buf
-                printf("Out of event space!\r\n");
-                while(1);
-                return;
-            }
-        }
-        task_commit_list_src[i] = ev_dst;
-        task_commit_list_dst[i] = task_dirty_buf_dst[i];
-        task_commit_list_size[i] = task_dirty_buf_size[i];
-
-    }
-    num_dtv = num_tbe;
-}
 
 /*
  * @brief: commit values touched during events back to main memory
@@ -271,7 +228,7 @@ void evcommit_ph1() {
 void ev_commit() {
     // Copy all tx buff entries to main memory
     LCG_PRINTF("Running ev_commit! should commit %u\r\n",
-    ((ev_state*)(curctx->extra_ev_state))->num_devv/* + num_evbe*/);
+    ((ev_state*)(curctx->extra_ev_state))->num_devv);
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
         uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
         LCG_PRINTF("Copying %i th time from %x to %x \r\n", num_devv-1,
@@ -283,10 +240,6 @@ void ev_commit() {
         );
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
-    // Safe to add this clear here because num_devv is down to 0 and commit is
-    // fully complete
-    clear_filter(read_filters + EV);
-    clear_filter(write_filters + EV);
     ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = COMMIT_DONE;
 }
 

@@ -23,6 +23,8 @@ typedef struct bloom_filter_{
 
 void add_to_filter(bloom_filter *, unsigned);
 
+int compare_lists(void **, void **, uint16_t, uint16_t);
+
 int compare_filters(bloom_filter *, bloom_filter *);
 
 void clear_filter(bloom_filter *);

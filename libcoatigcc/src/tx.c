@@ -27,8 +27,15 @@ __nv void * tx_dirty_src[NUM_DIRTY_ENTRIES];
 __nv void * tx_dirty_dst[NUM_DIRTY_ENTRIES];
 __nv size_t tx_dirty_size[NUM_DIRTY_ENTRIES];
 
+__nv void * tx_read_list[NUM_DIRTY_ENTRIES];
+__nv void * tx_write_list[NUM_DIRTY_ENTRIES];
+
 // volatile number of tx buffer entries that we want to clear on reboot
 volatile uint16_t num_txbe = 0;
+// volatile number of reads the transaction has performed
+volatile uint16_t num_txread = 0;
+// volatile number of reads the transaction has performed
+volatile uint16_t num_txwrite = 0;
 // volatile flat that indicates need to commit transaction
 volatile uint8_t need_tx_commit = 0;
 
@@ -36,6 +43,8 @@ volatile uint8_t need_tx_commit = 0;
 __nv tx_state state_1 = {0};
 __nv tx_state state_0 = {
     .num_dtxv = 0,
+    .num_read = 0,
+    .num_write = 0,
     .in_tx = 0,
     .tx_need_commit = 0,
     .serialize_after = 0
@@ -66,6 +75,8 @@ void tx_begin() {
     cur_tx_start = curctx->task;
     need_tx_commit = 0;
     num_txbe = 0;
+    num_txread = 0;
+    num_txwrite = 0;
 }
 
 void my_tx_begin() {
@@ -112,71 +123,54 @@ void *  t_get_dst(void * addr) {
     return NULL;
 }
 
-
 /*
- * @brief Returns a pointer to the value stored in the task buffer or the
- * transaction buffer or (finally) the value in main memory
+ * @brief function to do second phase of commit from task inside tx to tx buffer
+ * from tsk buffer
+ * @notes: based on persistent var: num_dtv
  */
-/*
-void * tread(void * addr) {
-    int index;
-    index = find(addr);
-    // check tsk buf
-    if(index > -1) {
-        return task_dirty_buf_dst[index];
+void tx_inner_commit_ph2() {
+  uint16_t num_tx_vars =((tx_state *)(curctx->extra_state))->num_dtxv; 
+  uint16_t i = 0;
+  while(num_dtv > 0) {
+    for(i = 0; i < num_tx_vars; i++) {
+      if(task_dirty_buf_src[num_dtv - 1] == tx_dirty_src[i]) {
+        memcpy( tx_dirty_dst[i],
+                task_dirty_buf_dst[num_dtv - 1],
+                task_dirty_buf_size[num_dtv -1]
+              );
+        break;
+      }
     }
-    else {
-        // Not in tsk buf, so check tx buf
-        index = tfind(addr);
-        if(index > -1) {
-            return tx_dirty_dst[index];
-        }
-        // Not in tx buf either, so add to filter and return main memory addr
-        else {
-            add_to_filter(read_filters + THREAD,addr);
-            return addr;
-        }
+    if(i >= num_tx_vars) {
+      void *dst = tx_dirty_buf_alloc(task_dirty_buf_src[num_dtv -1],
+                                     task_dirty_buf_size[num_dtv - 1]);
+      if(dst == NULL) {
+        printf("Error allocating to tx buff\r\n");
+        while(1);
+      }
+      memcpy( dst,
+              task_dirty_buf_dst[num_dtv - 1],
+              task_dirty_buf_size[num_dtv - 1]
+            );
     }
+    num_dtv--;
+  }
+  return;
 }
-*/
+
+
 /*
- * @brief sets the write back locations to the tx buf instead of main memory
- * @comments warning, this involves multiple linear searches all at once which
- * means it's super expensive but frankly is just as bad access-count-wise as
- * doing it on the fly in the middle of the task and at least we amortize the
- * function overheads
+ * @brief does the first phase of updates to the actual tx state when a tx
+ * commits, not just when a task inside a tx commits.
  */
-void tcommit_ph1() {
-    LCG_PRINTF("In tcommit! \r\n");
-    // check for new stuff to add to tx buf from tsk buf
-    if(!num_tbe)
-        return;
-
-    for(int i = 0; i < num_tbe; i++) {
-        // Step in and find the tx_buf and change the spot where commit_ph2 will
-        // write back to
-        // TODO add in some optimizations here for when we're committing the
-        // transaction too. No need to write back to tx if committing after
-        // active task
-
-        // hunt for addr in tx buf and return new dst if it's in there
-        void *tx_dst = t_get_dst(task_dirty_buf_src[i]);
-        if(!tx_dst) {
-            tx_dst = tx_dirty_buf_alloc(task_dirty_buf_src[i],
-                      task_dirty_buf_size[i]);
-            if(!tx_dst) {
-                // Error! We ran out of space in tx buf
-                printf("Out of space!\r\n");
-                while(1);
-                return;
-            }
-        }
-        task_commit_list_src[i] = tx_dst;
-        task_commit_list_dst[i] = task_dirty_buf_dst[i];
-        task_commit_list_size[i] = task_dirty_buf_size[i];
-
-    }
-    num_dtv = num_tbe;
+void tx_commit_ph1(tx_state * new_tx_state) {
+    new_tx_state->num_dtxv = ((tx_state *)(curctx->extra_state))->num_dtxv +
+                                                                  num_txbe;
+    new_tx_state->num_read = ((tx_state *)(curctx->extra_state))->num_read +
+                                                                  num_txread;
+    new_tx_state->num_write = ((tx_state *)(curctx->extra_state))->num_write +
+                                                                  num_txwrite;
+    
 }
 
 /*
@@ -185,9 +179,10 @@ void tcommit_ph1() {
  */
 void * tx_dirty_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
-    if(num_txbe) {
-        new_ptr = (uint16_t) tx_dirty_dst[num_txbe - 1] +
-        tx_dirty_size[num_txbe - 1];
+    uint16_t index = ((tx_state *)curctx->extra_state)->num_dtxv; 
+    if(index) {
+        new_ptr = (uint16_t) tx_dirty_dst[index - 1] +
+        tx_dirty_size[index - 1];
         // Fix alignment struggles
         if(size == 2) {
           while(new_ptr & 0x1)
@@ -205,10 +200,10 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
         return NULL;
     }
     else {
-        num_txbe++;
-        tx_dirty_src[num_txbe - 1] = addr;
-        tx_dirty_dst[num_txbe - 1] = (void *) new_ptr;
-        tx_dirty_size[num_txbe - 1] = size;
+        tx_dirty_src[index] = addr;
+        tx_dirty_dst[index] = (void *) new_ptr;
+        tx_dirty_size[index] = size;
+        ((tx_state *)curctx->extra_state)->num_dtxv++; 
     }
     return (void *) new_ptr;
 }
@@ -218,7 +213,7 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
  * serialize before (the default)
  */
 static void tx_commit_txsb() {
-    // Copy all tx buff entries to main memory
+    // Copy all tx buff entries to main memory no matter what
     LCG_PRINTF("In tx_commit ser before!\r\n");
 #ifdef LCG_CONF_ALL
     uint16_t num_dtxv_start = 0;
@@ -228,7 +223,7 @@ static void tx_commit_txsb() {
 #ifdef LCG_CONF_ALL
         num_dtxv_start = num_dtxv;
 #endif
-        LCG_PRINTF("Copying %x from %x to %x \r\n", 
+        LCG_PRINTF("Copying %x from %x to %x \r\n",
                     *((uint16_t *)tx_dirty_dst[num_dtxv - 1]),
                     tx_dirty_dst[num_dtxv - 1],
                     tx_dirty_src[num_dtxv-1]);
@@ -239,16 +234,21 @@ static void tx_commit_txsb() {
         ((tx_state *)(curctx->extra_state))->num_dtxv--;
     }
     // Now compare filters to see if we can safely merge in any ongoing events
-    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == FUTURE_COMMIT){
+    // but only if the events still need to be committed
+    // don't worry- the last thing ev_commit does is flip the state to COMMIT_DONE
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == FUTURE_COMMIT) {
         int conflict = 0;
         // Only a conflict if event read a value written by the transaction
         // since in all other cases we can serialize the tx before the event
-        conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
+        //conflict |= compare_filters(read_filters + EV, write_filters + THREAD);
+        uint16_t ev_len = ((ev_state *)curctx->extra_ev_state)->num_read;
+        uint16_t tx_len = ((tx_state *)curctx->extra_state)->num_write;
+        conflict |= compare_lists(ev_read_list, tx_write_list, ev_len, tx_len);
         if(!conflict){
             LCG_CONF_REP("committing event accesses!\r\n");
             ev_commit();
         }
-        else{
+        else {
             LCG_CONF_REP("Conflict! Cannot commit\r\n");
             // For debugging, print off everything:
 #ifdef LCG_CONF_ALL
@@ -279,16 +279,17 @@ static void tx_commit_txsb() {
  */
 static void tx_commit_txsa() {
     LCG_PRINTF("In tx_commit ser after!\r\n");
-    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == FUTURE_COMMIT){
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == FUTURE_COMMIT) {
         // Commit event accesses back to main memory
-        LCG_PRINTF("committing event accesses!\r\n");
-        ev_commit();
 
         // Now compare filters to see if any tx read a value written by the
         // concurrent event(s), making it impossible to serialize after
         int conflict = 0;
-        conflict |= compare_filters(read_filters + THREAD, write_filters +
-        EV);
+        uint16_t ev_len = ((ev_state *)curctx->extra_ev_state)->num_write;
+        uint16_t tx_len = ((tx_state *)curctx->extra_state)->num_read;
+        conflict |= compare_lists(tx_read_list, ev_write_list, tx_len, ev_len);
+        //conflict |= compare_filters(read_filters + THREAD, write_filters +
+        //EV);
         if(conflict){
             LCG_CONF_REP("Conflict! Must rollback transaction\r\n");
             // Resetting the curctx task so we go back to the top of the tx
@@ -299,11 +300,19 @@ static void tx_commit_txsa() {
             // the tx_need_commit flag would probably help, but also makes
             // things more confusing IMHO.
             curctx->task = cur_tx_start;
+            LCG_PRINTF("committing event accesses!\r\n");
+            // Artificially set num_dtxv to 0 so we can always run through the
+            // commit phase.
+            ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
+            // Run ev_commit so we set the ev_need_commit flag to commit_done
+            // instead of future commit
+            ev_commit();
 
             return;
         }
-        else{
-            LCG_CONF_REP("Continuing to tx commit! \r\n");
+        else {
+            LCG_PRINTF("committing event accesses!\r\n");
+            ev_commit();
         }
     }
     else {
@@ -326,6 +335,7 @@ static void tx_commit_txsa() {
 
 /*
  * @brief write back to source on transaction commit
+ * @notes uhh, this sucker runs regardless... this could be bad
  */
 void tx_commit() {
 
@@ -336,11 +346,15 @@ void tx_commit() {
     else {
       tx_commit_txsa();
     }
+    // Clear out persistent filter data if we know comparison with ongoing event
+    // is done
+    if(((ev_state *)(curctx->extra_ev_state))->ev_need_commit == COMMIT_DONE) {
+      ((ev_state *)(curctx->extra_ev_state))->num_read = 0;
+      ((tx_state *)(curctx->extra_state))->num_read = 0;
+      ((ev_state *)(curctx->extra_ev_state))->num_write = 0;
+      ((tx_state *)(curctx->extra_state))->num_write = 0;
+    }
 
-    // Safe to do this here since we're done committing everything, so any
-    // reruns of tx_commit_txs* will not do anything anyway.
-    clear_filter(write_filters + THREAD);
-    clear_filter(read_filters + THREAD);
     // zeroing need_tx_commit MUST come after removing in_tx condition since we
     // perform tx_commit based on the need_tx_commit flag
     // But we clear the serialize after flag before in_tx so that we're

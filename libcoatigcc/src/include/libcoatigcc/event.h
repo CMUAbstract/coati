@@ -18,19 +18,22 @@
 
 typedef struct _ev_state {
     uint16_t num_devv;
+    uint16_t num_read;
+    uint16_t num_write;
     uint8_t in_ev;
     uint8_t ev_need_commit;
 } ev_state;
 
 extern volatile uint16_t num_evbe;
+extern volatile uint16_t num_evread;
 
 extern ev_state state_ev_1;
 extern ev_state state_ev_0;
 
 extern context_t *thread_ctx;
 extern task_t * cur_tx_start;
-extern bloom_filter write_filters[NUM_PRIO_LEVELS];
-extern bloom_filter read_filters[NUM_PRIO_LEVELS];
+extern void * ev_read_list[];
+extern void * ev_write_list[];
 
 void event_return();
 void event_handler();
@@ -42,10 +45,13 @@ void *  ev_get_dst(void * addr);
 void * ev_dirty_buf_alloc(void * addr, size_t size);
 
 extern volatile uint16_t num_evbe;
+extern volatile uint16_t num_evread;
+extern volatile uint16_t num_evwrite;
+
 extern __nv uint8_t ev_dirty_buf[BUF_SIZE];
-extern __nv void * ev_dirty_src[NUM_DIRTY_ENTRIES];
-extern __nv void * ev_dirty_dst[NUM_DIRTY_ENTRIES];
-extern __nv size_t ev_dirty_size[NUM_DIRTY_ENTRIES];
+extern __nv void * ev_dirty_src[];
+extern __nv void * ev_dirty_dst[];
+extern __nv size_t ev_dirty_size[];
 
 #define EVENT_ENABLE_FUNC(func) void _enable_events() { func(); }
 #define EVENT_DISABLE_FUNC(func) void _disable_events() { func(); }

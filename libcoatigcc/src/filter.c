@@ -88,3 +88,14 @@ void clear_filter(bloom_filter *filter) {
 #endif
     return;
 }
+
+int compare_lists(void **ser1, void **ser2, uint16_t len1, uint16_t len2) {
+  for(uint16_t i = 0; i < len1; i++) {
+    for(uint16_t j = 0; j < len2; j++) {
+      if((void *)ser1[i] == (void *)ser2[j]) {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
