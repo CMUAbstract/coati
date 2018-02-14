@@ -132,6 +132,9 @@ void event_return() {
   // Figure out if there's an ongoing transaction
   if(((tx_state *)(thread_ctx->extra_state))->in_tx == 0) {
       LCG_PRINTF("Starting ev_commit\r\n");
+      // Clear num_read/write
+      ((ev_state *)(curctx->extra_ev_state))->num_read = 0;
+      ((ev_state *)(curctx->extra_ev_state))->num_write = 0;
       // If no ongoing transaction, run ev_commit to move updated memory
       ev_commit();
   }
@@ -153,10 +156,11 @@ void event_return() {
 
   // Update the number of dirty variables, otherwise leave the copies the same
   new_ev_state->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv;
-  new_ev_state->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv;
   new_ev_state->ev_need_commit =
                       ((ev_state*)curctx->extra_ev_state)->ev_need_commit;
   new_ev_state->in_ev = 0;
+  new_ev_state->num_read = ((ev_state *)curctx->extra_ev_state)->num_read;
+  new_ev_state->num_write = ((ev_state *)curctx->extra_ev_state)->num_write;
   //LCG_PRINTF("Checking thread stuff\r\n");
 
   // Now we patch in the new states and point curctx to next_ctx
@@ -279,18 +283,18 @@ void * ev_dirty_buf_alloc(void * addr, size_t size) {
     if(num_vars) {
         new_ptr = (uint8_t *) ev_dirty_dst[num_vars - 1] +
         ev_dirty_size[num_vars - 1];
-        // Fix alignment struggles
-        if(size == 2) {
-          while(new_ptr & 0x1)
-            new_ptr++;
-        }
-        if(size == 4) {
-          while(new_ptr & 0x11)
-            new_ptr++;
-        }
     }
     else {
         new_ptr = (uint8_t *) ev_dirty_buf;
+    }
+    // Fix alignment struggles
+    if(size == 2) {
+      while(new_ptr & 0x1)
+        new_ptr++;
+    }
+    if(size == 4) {
+      while(new_ptr & 0x11)
+        new_ptr++;
     }
     if(new_ptr + size > (unsigned) (ev_dirty_buf + BUF_SIZE)) {
         LCG_PRINTF("asking for %u, only have %u \r\n", new_ptr + size,

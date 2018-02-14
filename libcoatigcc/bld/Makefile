@@ -2,7 +2,6 @@ LIB = libcoatigcc
 
 export LIBCOATIGCC_ENABLE_DIAGNOSTICS = 0
 export LIBCOATIGCC_CONF_REPORT = 1
-export LIBCOATIGCC_FILT = 0
 
 include ../Makefile.config
 

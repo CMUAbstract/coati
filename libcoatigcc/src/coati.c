@@ -55,6 +55,7 @@ static void * task_dirty_buf_alloc(void *, size_t);
  * state
  */
 void commit_ph1() {
+    LCG_PRINTF("new dtv = %u\r\n",num_tbe);
     num_dtv = num_tbe;
 }
 
@@ -97,35 +98,40 @@ void * task_dirty_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
     // Totally valid to use volatile counter here on task level
     if(num_tbe) {
+        // Set new pointer based on last pointer and the length of the var it
+        // stores
         new_ptr = (uint16_t) task_dirty_buf_dst[num_tbe - 1] +
         task_dirty_buf_size[num_tbe - 1];
         // Fix alignment struggles
-        if(size == 2) {
-          while(new_ptr & 0x1)
-            new_ptr++;
-        }
-        if(size == 4) {
-          LCG_PRINTF("allocing 32 bit!\r\n");
-          while(new_ptr & 0x11)
-            new_ptr++;
-        }
     }
     else {
+        // TODO figure out if the pointers ever need to be shifted, i.e. for a
+        // 32 bit write at the start
         new_ptr = (uint16_t) task_dirty_buf;
     }
-    LCG_PRINTF("Writing to %x, buf = %x, num_tbe = %x \r\n", new_ptr,
-        task_dirty_buf, num_tbe);
+    if(size == 2) {
+      while(new_ptr & 0x1)
+        new_ptr++;
+    }
+    if(size == 4) {
+      LCG_PRINTF("allocing 32 bit!\r\n");
+      while(new_ptr & 0x11)
+        new_ptr++;
+    }
     if(new_ptr + size > (unsigned) (task_dirty_buf + BUF_SIZE)) {
         LCG_PRINTF("Returning null! %x > %x \r\n",
             new_ptr + size,(unsigned) (task_dirty_buf + BUF_SIZE));
         return NULL;
     }
     else {
+        // Used to indicate how many volatile variables we've been able to store
         num_tbe++;
         task_dirty_buf_src[num_tbe - 1] = addr;
         task_dirty_buf_dst[num_tbe - 1] = (void *) new_ptr;
         task_dirty_buf_size[num_tbe - 1] = size;
     }
+    LCG_PRINTF("Writing to %x, from = %x, num_tbe = %x \r\n", new_ptr,
+        task_dirty_buf_src[num_tbe -1], num_tbe);
     return (void *) new_ptr;
 }
 
@@ -147,7 +153,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
             read_cnt += num_evread;
             if(read_cnt >= NUM_DIRTY_ENTRIES) {
-              printf("Out of space in read list!\r\n");
+              printf("Out of space in ev read list!\r\n");
               while(1);
             }
             ev_read_list[read_cnt] = addr;
@@ -184,7 +190,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             read_cnt = ((tx_state *)curctx->extra_state)->num_read;
             read_cnt += num_txread;
             if(read_cnt >= NUM_DIRTY_ENTRIES) {
-              printf("Out of space in read buff!\r\n");
+              printf("Out of space in tx read list!\r\n");
               while(1);
             }
             tx_read_list[read_cnt] = addr;
@@ -325,6 +331,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             }
             break;
         case TX:
+            // Inc number of variables written 
             write_cnt = ((tx_state *)curctx->extra_state)->num_write;
             write_cnt += num_txwrite;
             if(write_cnt >= NUM_DIRTY_ENTRIES) {
@@ -413,9 +420,11 @@ void task_prologue()
     
     // check if we're committing a task inside a transaction
     if(((tx_state *)curctx->extra_state)->in_tx) {
+      LCG_PRINTF("Running tx inner commit\r\n");
       tx_inner_commit_ph2();
     }
     else {
+      LCG_PRINTF("Running normal commit\r\n");
       commit_ph2();
     }
     // Now check if there's a commit here
@@ -465,6 +474,7 @@ void transition_to(task_t *next_task)
         tx_commit_ph1(new_tx_state);
     }
     else {
+        LCG_PRINTF("Running normal commit phase 1\r\n");
         commit_ph1();
     }
 

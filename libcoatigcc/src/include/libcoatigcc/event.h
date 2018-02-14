@@ -104,9 +104,9 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 #define EVENT(index,name) \
         void name(); \
         __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
-        __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0}; \
-        __nv ev_state EV_ST_SYM_NAME(name) = {0,1,0};\
-        __nv ev_state EV_ST2_SYM_NAME(name) = {0,1,0};\
+        __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0,0,0,0}; \
+        __nv ev_state EV_ST_SYM_NAME(name) = {0,0,0,1,COMMIT_DONE};\
+        __nv ev_state EV_ST2_SYM_NAME(name) = {0,0,0,1, COMMIT_DONE};\
         __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
                                                   TX_ST_REF(name), \
                                                   EV_ST_REF(name) \

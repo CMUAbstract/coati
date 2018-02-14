@@ -100,9 +100,9 @@ void tx_end() {
 /*
  * @brief returns the index into the tx buffers of where the data is located
  */
-int16_t  tfind(const void * addr) {
-    if(num_txbe) {
-      for(int i = 0; i < num_txbe; i++) {
+int16_t  tx_find(const void * addr) {
+    if(((tx_state *)curctx->extra_state)->num_dtxv) {
+      for(int i = 0; i < ((tx_state *)curctx->extra_state)->num_dtxv; i++) {
           if(addr == tx_dirty_src[i])
               return i;
       }
@@ -113,9 +113,9 @@ int16_t  tfind(const void * addr) {
 /*
  * @brief returns the pointer into the tx dirty buf where the data is located
  */
-void *  t_get_dst(void * addr) {
-    if(num_txbe) {
-      for(int i = 0; i < num_txbe; i++) {
+void *  tx_get_dst(void * addr) {
+    if(((tx_state *)curctx->extra_state)->num_dtxv) {
+      for(int i = 0; i < ((tx_state *)curctx->extra_state)->num_dtxv; i++) {
           if(addr == tx_dirty_src[i])
               return tx_dirty_dst[i];
       }
@@ -131,24 +131,33 @@ void *  t_get_dst(void * addr) {
 void tx_inner_commit_ph2() {
   uint16_t num_tx_vars =((tx_state *)(curctx->extra_state))->num_dtxv; 
   uint16_t i = 0;
+  printf("tx inner commit, num_dtv = %x\r\n",num_dtv);
+  // Cycle through all the variables to commit
   while(num_dtv > 0) {
-    for(i = 0; i < num_tx_vars; i++) {
-      if(task_dirty_buf_src[num_dtv - 1] == tx_dirty_src[i]) {
-        memcpy( tx_dirty_dst[i],
+    void *dst = tx_get_dst(task_dirty_buf_src[num_dtv - 1]);
+    if(dst != NULL) {
+        printf("Copying from %x to %x, %x bytes \r\n",
+                    ((uint8_t *)task_dirty_buf_dst[num_dtv - 1]),
+                    dst,
+                    task_dirty_buf_size[num_dtv-1]);
+        memcpy( dst,
                 task_dirty_buf_dst[num_dtv - 1],
                 task_dirty_buf_size[num_dtv -1]
               );
-        break;
-      }
     }
-    if(i >= num_tx_vars) {
-      void *dst = tx_dirty_buf_alloc(task_dirty_buf_src[num_dtv -1],
+    else{
+      printf("Not found! allocing!\r\n");
+      void *dst_alloc = tx_dirty_buf_alloc(task_dirty_buf_src[num_dtv -1],
                                      task_dirty_buf_size[num_dtv - 1]);
-      if(dst == NULL) {
+      if(dst_alloc == NULL) {
         printf("Error allocating to tx buff\r\n");
         while(1);
       }
-      memcpy( dst,
+        printf("Copying from %x to %x, %x bytes \r\n",
+                    ((uint16_t *)task_dirty_buf_dst[num_dtv - 1]),
+                    dst_alloc,
+                    task_dirty_buf_size[num_dtv-1]);
+      memcpy( dst_alloc,
               task_dirty_buf_dst[num_dtv - 1],
               task_dirty_buf_size[num_dtv - 1]
             );
@@ -164,12 +173,17 @@ void tx_inner_commit_ph2() {
  * commits, not just when a task inside a tx commits.
  */
 void tx_commit_ph1(tx_state * new_tx_state) {
-    new_tx_state->num_dtxv = ((tx_state *)(curctx->extra_state))->num_dtxv +
-                                                                  num_txbe;
+    // Kind of wrong now that we're really just doing this update in tx
+    // commit... I think this first assignment needs to be removed
+    //new_tx_state->num_dtxv = ((tx_state *)(curctx->extra_state))->num_dtxv +
+    //                                                              num_txbe;
+    // Update length of read/write lists
     new_tx_state->num_read = ((tx_state *)(curctx->extra_state))->num_read +
                                                                   num_txread;
     new_tx_state->num_write = ((tx_state *)(curctx->extra_state))->num_write +
                                                                   num_txwrite;
+    // Latch number of items in tsk buffer
+    num_dtv = num_tbe;
     
 }
 
@@ -183,18 +197,18 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
     if(index) {
         new_ptr = (uint16_t) tx_dirty_dst[index - 1] +
         tx_dirty_size[index - 1];
-        // Fix alignment struggles
-        if(size == 2) {
-          while(new_ptr & 0x1)
-            new_ptr++;
-        }
-        if(size == 4) {
-          while(new_ptr & 0x11)
-            new_ptr++;
-        }
     }
     else {
         new_ptr = (uint16_t) tx_dirty_buf;
+    }
+    // Fix alignment struggles
+    if(size == 2) {
+      while(new_ptr & 0x1)
+        new_ptr++;
+    }
+    if(size == 4) {
+      while(new_ptr & 0x11)
+        new_ptr++;
     }
     if(new_ptr + size > (unsigned) (tx_dirty_buf + BUF_SIZE)) {
         return NULL;
@@ -214,7 +228,7 @@ void * tx_dirty_buf_alloc(void * addr, size_t size) {
  */
 static void tx_commit_txsb() {
     // Copy all tx buff entries to main memory no matter what
-    LCG_PRINTF("In tx_commit ser before!\r\n");
+    printf("In tx_commit ser before!\r\n");
 #ifdef LCG_CONF_ALL
     uint16_t num_dtxv_start = 0;
 #endif
@@ -223,8 +237,7 @@ static void tx_commit_txsb() {
 #ifdef LCG_CONF_ALL
         num_dtxv_start = num_dtxv;
 #endif
-        LCG_PRINTF("Copying %x from %x to %x \r\n",
-                    *((uint16_t *)tx_dirty_dst[num_dtxv - 1]),
+        printf("Copying from %x to %x \r\n",
                     tx_dirty_dst[num_dtxv - 1],
                     tx_dirty_src[num_dtxv-1]);
         memcpy( tx_dirty_src[num_dtxv -1],
