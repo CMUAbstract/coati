@@ -27,11 +27,25 @@ typedef uint32_t task_mask_t;
 typedef uint16_t field_mask_t;
 typedef unsigned task_idx_t;
 
-extern void *task_dirty_buf_src[];
-extern void *task_dirty_buf_dst[];
-extern size_t task_dirty_buf_size[];
-extern uint8_t task_dirty_buf[];
+typedef enum {
+  NO_COMMIT,
+  TSK_COMMIT,
+  TSK_IN_TX_COMMIT,
+  TX_COMMIT,
+  TX_ONLY,
+  EV_COMMIT,
+  EV_ONLY,
+  TX_EV_COMMIT,
+  EV_TX_COMMIT,
+  EV_PH1,
+  TSK_PH1,
+  TX_PH1
+} commit;
 
+extern void *tsk_src[];
+extern void *tsk_dst[];
+extern size_t tsk_size[];
+extern uint8_t tsk_buf[];
 
 extern uint16_t volatile num_tbe;
 extern uint16_t num_dtv;
@@ -51,6 +65,8 @@ typedef struct _context_t {
     void *extra_state;
     /** @brief Another one! We need this one to handle events */
     void *extra_ev_state;
+    /** @brief enum to indicate the current commit type we need to run */
+    commit commit_state;
 
 } context_t;
 
@@ -131,9 +147,10 @@ void _init();
  */
 #define INIT_FUNC(func) void _init() { func(); }
 
-void task_prologue();
-void transition_to(task_t *task);
+void commit_phase2();
+void commit_phase1();
 
+void transition_to(task_t *task);
 
 /** @brief Transfer control to the given task
  *  @param task     Name of the task function
@@ -142,7 +159,7 @@ void transition_to(task_t *task);
 
 void * read(const void * addr, unsigned size, acc_type acc);
 void  write(const void *addr, unsigned size, acc_type acc, uint32_t value);
-int16_t find(const void *addr);
+int16_t tsk_find(const void *addr);
 void *internal_memcpy(void *dest, void *src, uint16_t num);
 
 /**
