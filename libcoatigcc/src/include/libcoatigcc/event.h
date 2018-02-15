@@ -10,12 +10,6 @@
 #define EV  1
 #define NUM_PRIO_LEVELS 2
 
-// Define the flavors of commit
-#define COMMIT_DONE 4
-#define FUTURE_COMMIT 3
-#define LOCAL_COMMIT 1
-#define NO_COMMIT 0
-
 typedef struct _ev_state {
     uint16_t num_devv;
     uint16_t num_read;
@@ -35,23 +29,21 @@ extern task_t * cur_tx_start;
 extern void * ev_read_list[];
 extern void * ev_write_list[];
 
-void event_return();
 void event_handler();
-void ev_commit_ph1(ev_state *, ev_state *);
-void ev_commit();
+void ev_commit_ph2();
 
-int16_t  evfind(const void * addr);
+int16_t  ev_find(const void * addr);
 void *  ev_get_dst(void * addr);
-void * ev_dirty_buf_alloc(void * addr, size_t size);
+void * ev_buf_alloc(void * addr, size_t size);
 
 extern volatile uint16_t num_evbe;
 extern volatile uint16_t num_evread;
 extern volatile uint16_t num_evwrite;
 
-extern __nv uint8_t ev_dirty_buf[BUF_SIZE];
-extern __nv void * ev_dirty_src[];
-extern __nv void * ev_dirty_dst[];
-extern __nv size_t ev_dirty_size[];
+extern __nv uint8_t ev_buf[BUF_SIZE];
+extern __nv void * ev_src[];
+extern __nv void * ev_dst[];
+extern __nv size_t ev_size[];
 
 #define EVENT_ENABLE_FUNC(func) void _enable_events() { func(); }
 #define EVENT_DISABLE_FUNC(func) void _disable_events() { func(); }
@@ -105,26 +97,20 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
         void name(); \
         __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
         __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0,0,0,0}; \
-        __nv ev_state EV_ST_SYM_NAME(name) = {0,0,0,1,COMMIT_DONE};\
-        __nv ev_state EV_ST2_SYM_NAME(name) = {0,0,0,1, COMMIT_DONE};\
+        __nv ev_state EV_ST_SYM_NAME(name) = {0,0,0,1,0};\
+        __nv ev_state EV_ST2_SYM_NAME(name) = {0,0,0,1,0};\
         __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
                                                   TX_ST_REF(name), \
                                                   EV_ST_REF(name) \
                                                 };
 
 // Macro to handle first and second phase of commit
-#define EVENT_RETURN(name) \
-        ev_commit_ph1(EV_ST_REF(name), EV_ST2_REF(name)); \
-        event_return();
+#define EVENT_RETURN() \
+        curctx->commit_state = EV_PH1;\
+        transition_to(thread_ctx->task)
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)
 
-#define EVENT_SETUP( name , gcc_vect, clang_vect) \
-          void __attribute__(gcc_vect) clang_vect ## ISR(void) \
-          { printf("In ev shell\r\n\n\n\n\n"); \
-            event_handler(TASK_REF(name)); } \
-          __attribute__((section("interrupt ## clang_vect"),aligned(2))) \
-          void(*__## clang_vect)(void) = clang_vect ## ISR;
 
 #endif

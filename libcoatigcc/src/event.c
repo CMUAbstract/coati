@@ -15,23 +15,16 @@
 #endif
 
 
-__nv uint8_t ev_dirty_buf[BUF_SIZE];
-__nv void * ev_dirty_src[NUM_DIRTY_ENTRIES];
-__nv void * ev_dirty_dst[NUM_DIRTY_ENTRIES];
-__nv size_t ev_dirty_size[NUM_DIRTY_ENTRIES];
+__nv uint8_t ev_buf[BUF_SIZE];
+__nv void * ev_src[NUM_DIRTY_ENTRIES];
+__nv void * ev_dst[NUM_DIRTY_ENTRIES];
+__nv size_t ev_size[NUM_DIRTY_ENTRIES];
 __nv void * ev_read_list[NUM_DIRTY_ENTRIES];
 __nv void * ev_write_list[NUM_DIRTY_ENTRIES];
 
 __nv context_t * thread_ctx;
 __nv task_t * cur_tx_start;
 
-/**
- * @brief a kind of complicated variable declaration, this should only happen
- * when the thing is initially programmed though, so no worries
- * @info this sets the filter_size based on what's in bloom_filter.h, so this
- * will likely need to change to improve flexibility/portability
- */
-static unsigned djb(unsigned data);
 volatile uint16_t num_evbe = 0;
 volatile uint16_t num_evread = 0;
 volatile uint16_t num_evwrite = 0;
@@ -42,7 +35,7 @@ __nv ev_state state_ev_0 = {
     .num_read = 0,
     .num_write = 0,
     .in_ev = 0,
-    .ev_need_commit = COMMIT_DONE
+    .ev_need_commit = 0
 };
 
 
@@ -54,7 +47,7 @@ __nv ev_state state_ev_0 = {
 void event_handler(context_t *new_event_ctx) {
     // Disable all event interrupts
     _disable_events();
-
+    LCG_PRINTF("in event handler!\r\n");
     // Quick sanity check to make sure context hasn't been corrupted... if we're
     // here, it's DEFINITELY an event, so the in_ev bit had better be set.
     if(((ev_state *)new_event_ctx->extra_ev_state)->in_ev == 0){
@@ -64,8 +57,7 @@ void event_handler(context_t *new_event_ctx) {
 
     // Clear commit flag for this context
     // TODO add in some error checking
-    ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = NO_COMMIT;
-
+    ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = 0;
     // Clear event buffer counters but don't turn on curctx->in_ev! If we died
     // after seeting that, events would continously be disabled and they'd never
     // get turned back on
@@ -83,7 +75,8 @@ void event_handler(context_t *new_event_ctx) {
 
     // Point threads' context at current context
     thread_ctx=curctx;
-    LCG_PRINTF("Double check in:  %x \r\n",thread_ctx->task->func);
+    LCG_PRINTF("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
+    ((tx_state *)thread_ctx->extra_state)->in_tx);
 
     // Set curctx with prepackaged event_ctx
     curctx = new_event_ctx;
@@ -96,114 +89,15 @@ void event_handler(context_t *new_event_ctx) {
 }
 
 /*
- * @brief function to atomically swap the need commit flag and the number of
- * entries to commit in the event_buffer and read/write lists
- */
-void ev_commit_ph1(ev_state * ptr1, ev_state * ptr2) {
-  ev_state *new_ev_state;
-
-  // Update number of dirty variables and read/write set lengths
-  new_ev_state = (curctx->extra_ev_state == ptr1) ? ptr2 : ptr1;
-  new_ev_state->num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv +
-                                                                    num_evbe;
-  new_ev_state->num_read = ((ev_state *)(curctx->extra_ev_state))->num_read +
-                                                                    num_evread;
-  new_ev_state->num_write = ((ev_state *)(curctx->extra_ev_state))->num_write +
-                                                                    num_evwrite;
-  // Set need commit flag
-  new_ev_state->ev_need_commit = LOCAL_COMMIT;
-
-  // Set so we know we're in an event if we end up dying and rebooting.
-  new_ev_state->in_ev = 1;
-
-  // Swap pointer
-  curctx->extra_ev_state = new_ev_state;
-  return;
-}
-
-/*
- * @brief function to return from event and correctly restore state
- * @notes badly named- at this point it's more ev_commit_ph2 than anything else,
- * but that's life I suppose
- */
-void event_return() {
-  // We assume that ev_commit_ph1 has already been run successfully
-
-  // Figure out if there's an ongoing transaction
-  if(((tx_state *)(thread_ctx->extra_state))->in_tx == 0) {
-      LCG_PRINTF("Starting ev_commit\r\n");
-      // Clear num_read/write
-      ((ev_state *)(curctx->extra_ev_state))->num_read = 0;
-      ((ev_state *)(curctx->extra_ev_state))->num_write = 0;
-      // If no ongoing transaction, run ev_commit to move updated memory
-      ev_commit();
-  }
-  else {
-    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = FUTURE_COMMIT;
-  }
-
-  // Complicated, gross swap to follow so we correctly handle the update to
-  // num_devv
-  tx_state *new_tx_state;
-  ev_state *new_ev_state;
-  //Figure out which buffer to point to
-  new_tx_state = (thread_ctx->extra_state == &state_0 ? &state_1 : &state_0);
-  new_ev_state = (thread_ctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
-                  &state_ev_0);
-
-  //Copy over to the new buffer
-  *new_tx_state =*((tx_state *)(thread_ctx->extra_state));
-
-  // Update the number of dirty variables, otherwise leave the copies the same
-  new_ev_state->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv;
-  new_ev_state->ev_need_commit =
-                      ((ev_state*)curctx->extra_ev_state)->ev_need_commit;
-  new_ev_state->in_ev = 0;
-  new_ev_state->num_read = ((ev_state *)curctx->extra_ev_state)->num_read;
-  new_ev_state->num_write = ((ev_state *)curctx->extra_ev_state)->num_write;
-  //LCG_PRINTF("Checking thread stuff\r\n");
-
-  // Now we patch in the new states and point curctx to next_ctx
-  // Note: we don't update thread_ctx here because if we updated threadctx
-  // without atomically setting curctx=new_threadctx, then we could get curctx
-  // out of sync with the threadctx and things would break when we tried to
-  // return from the event.
-  if(thread_ctx == context_ptr0 || thread_ctx == context_ptr1) {
-    //Do swap
-    context_t *next_ctx;
-    next_ctx = (thread_ctx == context_ptr0 ? context_ptr1 : context_ptr0);
-    next_ctx->extra_state = new_tx_state;
-    next_ctx->extra_ev_state = new_ev_state;
-    next_ctx->task = thread_ctx->task;
-    curctx = next_ctx;
-  }
-  else {
-    //Error! thread_ctx should always be one of the contexts established in
-    //coati.c
-    printf("Error! got knocked out of correct ptrs!");
-    while(1);
-  }
-
-  _enable_events();
-  // Need to re-enable events here
-  // jump to curctx
-  __asm__ volatile ( // volatile because output operands unused by C
-        "br %[nt]\n"
-        : /* no outputs */
-        : [nt] "r" (curctx->task->func)
-        );
-}
-
-/*
  * @brief returns the index into the tx buffers of where the data is located
  */
-int16_t  evfind(const void * addr) {
+int16_t  ev_find(const void * addr) {
     int16_t num_vars = 0;
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
           //LCG_PRINTF("Checking %x \r\n",ev_dirty_src[i]);
-          if(addr == ev_dirty_src[i])
+          if(addr == ev_src[i])
               return i;
       }
     }
@@ -218,8 +112,8 @@ void *  ev_get_dst(void * addr) {
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
-          if(addr == ev_dirty_src[i])
-              return ev_dirty_dst[i];
+          if(addr == ev_src[i])
+              return ev_dst[i];
       }
     }
     return NULL;
@@ -229,22 +123,22 @@ void *  ev_get_dst(void * addr) {
 /*
  * @brief: commit values touched during events back to main memory
  */
-void ev_commit() {
+void ev_commit_ph2() {
     // Copy all tx buff entries to main memory
     LCG_PRINTF("Running ev_commit! should commit %u\r\n",
     ((ev_state*)(curctx->extra_ev_state))->num_devv);
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
         uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
         LCG_PRINTF("Copying %i th time from %x to %x \r\n", num_devv-1,
-        ev_dirty_src[num_devv-1],
-        ev_dirty_dst[num_devv - 1]);
-        memcpy( ev_dirty_src[num_devv -1],
-                ev_dirty_dst[num_devv - 1],
-                ev_dirty_size[num_devv - 1]
+        ev_src[num_devv-1],
+        ev_dst[num_devv - 1]);
+        memcpy( ev_src[num_devv -1],
+                ev_dst[num_devv - 1],
+                ev_size[num_devv - 1]
         );
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
-    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = COMMIT_DONE;
+    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = 0;
 }
 
 void *event_memcpy(void *dest, void *src, uint16_t num) {
@@ -275,17 +169,17 @@ void *event_memcpy(void *dest, void *src, uint16_t num) {
  * @brief allocs space in event buffer and returns a pointer to the spot,
  * returns NULL if buf is out of space
  */
-void * ev_dirty_buf_alloc(void * addr, size_t size) {
+void * ev_buf_alloc(void * addr, size_t size) {
     uint16_t new_ptr;
-    LCG_PRINTF("In alloc! num_evbe = %i, buf = %x\r\n",num_evbe, ev_dirty_buf);
+    LCG_PRINTF("In alloc! num_evbe = %i, buf = %x\r\n",num_evbe, ev_buf);
     uint16_t num_vars = 0;
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
-        new_ptr = (uint8_t *) ev_dirty_dst[num_vars - 1] +
-        ev_dirty_size[num_vars - 1];
+        new_ptr = (uint8_t *) ev_dst[num_vars - 1] +
+        ev_size[num_vars - 1];
     }
     else {
-        new_ptr = (uint8_t *) ev_dirty_buf;
+        new_ptr = (uint8_t *) ev_buf;
     }
     // Fix alignment struggles
     if(size == 2) {
@@ -296,9 +190,9 @@ void * ev_dirty_buf_alloc(void * addr, size_t size) {
       while(new_ptr & 0x11)
         new_ptr++;
     }
-    if(new_ptr + size > (unsigned) (ev_dirty_buf + BUF_SIZE)) {
+    if(new_ptr + size > (unsigned) (ev_buf + BUF_SIZE)) {
         LCG_PRINTF("asking for %u, only have %u \r\n", new_ptr + size,
-        (unsigned) (ev_dirty_buf + BUF_SIZE));
+        (unsigned) (ev_buf + BUF_SIZE));
         return NULL;
     }
     else {
@@ -306,10 +200,9 @@ void * ev_dirty_buf_alloc(void * addr, size_t size) {
         num_vars++;
         LCG_PRINTF("ev new src = %x new dst = %x index %i\r\n", addr, new_ptr,
         num_vars);
-        //(((ev_state *)(curctx->extra_ev_state))->num_devv)++;
-        ev_dirty_src[num_vars - 1] = addr;
-        ev_dirty_dst[num_vars - 1] = (void *) new_ptr;
-        ev_dirty_size[num_vars - 1] = size;
+        ev_src[num_vars - 1] = addr;
+        ev_dst[num_vars - 1] = (void *) new_ptr;
+        ev_size[num_vars - 1] = size;
     }
     return (void *) new_ptr;
 }

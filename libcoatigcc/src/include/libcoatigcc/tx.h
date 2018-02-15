@@ -20,18 +20,16 @@ typedef struct _tx_state {
 #define TX_BEGIN \
     tx_begin();
 
-// Used at ALL exit points of the last task in a transaction
-#define TX_END \
-    tx_end();
 
 // Normal transition_to macro given a different name for programming sanity
-#define TX_TRANSITION_TO(task) transition_to(TASK_REF(task))
+#define TX_TRANSITION_TO(task) \
+    curctx->commit_state = TSK_IN_TX_PH1; \
+    transition_to(TASK_REF(task))
 
 // transition macro for end of a transaction so we don't have TX_END's hanging
 // around
 #define TX_END_TRANSITION_TO(task) \
-    tx_end(); \
-    tx_commit_ph1(); \
+    curctx->commit_state = TX_PH1; \
     transition_to(TASK_REF(task))
 
 // Place immediately after TX_BEGIN in the first task of a transaction where the
@@ -62,28 +60,27 @@ typedef struct _tx_state {
 extern tx_state state_1;
 extern tx_state state_0;
 
-extern volatile uint16_t num_txbe;
 extern volatile uint16_t num_txread;
 extern volatile uint16_t num_txwrite;
 extern volatile uint8_t need_tx_commit;
 
 
-extern __nv uint8_t tx_dirty_buf[];
-extern __nv void * tx_dirty_src[];
-extern __nv void * tx_dirty_dst[];
-extern __nv size_t tx_dirty_size[];
+extern __nv uint8_t tx_buf[];
+extern __nv void * tx_src[];
+extern __nv void * tx_dst[];
+extern __nv size_t tx_size[];
 extern void * tx_read_list[];
 extern void * tx_write_list[];
 
 void tx_begin();
 void my_tx_begin();
-void tx_end();
 int16_t  tx_find(const void * addr);
 void *  tx_get_dst(void * addr);
-void tx_commit_ph1();
-void tx_inner_commit_ph2();
-void * tx_dirty_buf_alloc(void * addr, size_t size);
-void tx_commit();
+void * tx_buf_alloc(void * addr, size_t size);
+void tsk_in_tx_commit_ph2();
+void tx_commit_ph1_5();
+void tx_commit_ph2();
+
 void *tx_memcpy(void *dest, void *src, uint16_t num);
 
 #endif //_TX_H

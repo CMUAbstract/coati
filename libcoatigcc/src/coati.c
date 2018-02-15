@@ -19,7 +19,8 @@ __nv context_t context_1 = {0};
 __nv context_t context_0 = {
     .task = TASK_REF(_entry_task),
     .extra_state = &state_0,
-    .extra_ev_state = &state_ev_0
+    .extra_ev_state = &state_ev_0,
+    .commit_state = TSK_PH1
 };
 
 
@@ -34,8 +35,8 @@ __nv volatile unsigned _numBoots = 0;
 
 // task dirty buffer data
 __nv void * tsk_src[NUM_DIRTY_ENTRIES];
-__nv void * tsk__dst[NUM_DIRTY_ENTRIES];
-__nv size_t tsk__size[NUM_DIRTY_ENTRIES];
+__nv void * tsk_dst[NUM_DIRTY_ENTRIES];
+__nv size_t tsk_size[NUM_DIRTY_ENTRIES];
 __nv uint8_t tsk_buf[BUF_SIZE];
 
 
@@ -48,50 +49,39 @@ __nv uint16_t num_dtv = 0;
 // volatile record of type of commit needed
 volatile commit commit_type = NO_COMMIT;
 // Bundle of functions internal to the library
-static void commit_ph2();
-static void tsk_commit_ph1();
-static void * task_dirty_buf_alloc(void *, size_t);
-
-/**
- * @brief Function that updates number of dirty variables in the persistent
- * state
- */
-void tsk_commit_ph1() {
-    LCG_PRINTF("new dtv = %u\r\n",num_tbe);
-    num_dtv = num_tbe;
-    commit_status = TSK_COMMIT;
-}
+static void * tsk_buf_alloc(void *, size_t);
+static int16_t tsk_find(const void *addr);
+static void tsk_commit_ph2(void);
 
 /**
  * @brief Function that copies data to main memory from the task buffers
  * @notes based on persistent var num_dtv
  */
 void tsk_commit_ph2() {
-    // Copy all commit list entries
-    while(num_dtv > 0)  {
-      // Copy from dst in tsk buf to "home" for that variable
-      LCG_PRINTF("Copying to %x\r\n",tsk_src[num_dtv-1]);
-      memcpy( tsk_src[num_dtv - 1],
-              tsk_dst[num_dtv - 1],
-              tsk_size[num_dtv - 1]
-            );
-      num_dtv--;
-    }
-    commit_status = NO_COMMIT;
+  // Copy all commit list entries
+  printf("commit_ph2, committing %u entries\r\n",num_dtv);
+  while(num_dtv > 0)  {
+    // Copy from dst in tsk buf to "home" for that variable
+    printf("Copying to %x\r\n",tsk_src[num_dtv-1]);
+    memcpy( tsk_src[num_dtv - 1],
+            tsk_dst[num_dtv - 1],
+            tsk_size[num_dtv - 1]
+          );
+    num_dtv--;
+  }
 }
-
 
 /*
  * @brief returns the index into the buffers of where the data is located
  */
 int16_t  tsk_find(const void * addr) {
-    if(num_tbe) {
-      for(int i = 0; i < num_tbe; i++) {
-          if(addr == tsk_src[i])
-              return i;
-      }
+  if(num_tbe) {
+    for(int i = 0; i < num_tbe; i++) {
+      if(addr == tsk_src[i])
+        return i;
     }
-    return -1;
+  }
+  return -1;
 }
 
 /*
@@ -132,6 +122,7 @@ void * tsk_buf_alloc(void * addr, size_t size) {
         tsk_dst[num_tbe - 1] = (void *) new_ptr;
         tsk_size[num_tbe - 1] = size;
     }
+    LCG_PRINTF("ptr check: %x %x, buf = %x\r\n",tsk_dst[num_tbe - 1], new_ptr,tsk_buf); 
     LCG_PRINTF("Writing to %x, from = %x, num_tbe = %x \r\n", new_ptr,
         tsk_src[num_tbe -1], num_tbe);
     return (void *) new_ptr;
@@ -156,33 +147,33 @@ void * read(const void *addr, unsigned size, acc_type acc) {
               printf("Out of space in ev read list!\r\n");
               while(1);
             }
-            ev_read_list[read_cnt] = addr;
+            ev_read_list[read_cnt] = (void *) addr;
             num_evread++;
             // Now pull the memory from somewhere
             LCG_PRINTF("ev index = %u \r\n", index);
             if(index > -1) {
-               dst = ev_dirty_dst[index];
+               dst = (void *) ev_dst[index];
               LCG_PRINTF("rd: index = %u, Found, Buffer vals: ", index);
               for(int16_t i = 0; i < 8; i++) {
-                LCG_PRINTF("%x: ", ev_dirty_buf[i]);
+                LCG_PRINTF("%x: ", ev_buf[i]);
               }
               LCG_PRINTF("\r\n");
             }
             // Return main memory addr
             else {
-                dst = addr;
+                dst = (void *) addr;
             }
             break;
         case NORMAL:
             index = tsk_find(addr);
             if(index > -1) {
                 LCG_PRINTF("Found addr %x at buf dst %x\r\n",
-                            addr,task_dirty_buf_dst[index]);
-                dst = task_dirty_buf_dst[index];
+                            addr,tsk_dst[index]);
+                dst = (void *) tsk_dst[index];
             }
             else {
                 LCG_PRINTF("Addr %x not in buffer \r\n", addr);
-                dst = addr;
+                dst = (void *) addr;
             }
             break;
         case TX:
@@ -193,23 +184,23 @@ void * read(const void *addr, unsigned size, acc_type acc) {
               printf("Out of space in tx read list!\r\n");
               while(1);
             }
-            tx_read_list[read_cnt] = addr;
+            tx_read_list[read_cnt] = (void *) addr;
             num_txread++;
             // check tsk buf
             index = tsk_find(addr);
             if(index > -1) {
-                dst = tsk_dst[index];
+                dst = (void *) tsk_dst[index];
             }
             else {
                 // Not in tsk buf, so check tx buf
                 LCG_PRINTF("Checking tx buf\r\n");
                 index = tx_find(addr);
                 if(index > -1) {
-                    dst = tx_dst[index];
+                    dst = (void *) tx_dst[index];
                 }
                 // Not in tx buf either, return main memory addr
                 else {
-                    dst = addr;
+                    dst = (void *) addr;
                 }
             }
             break;
@@ -258,7 +249,7 @@ void write_word(void *addr, uint16_t value) {
         *((uint16_t *)(tsk_dst + index)) = value;
     }
     else {
-        void * dst = tsk_alloc(addr, 2);
+        void * dst = tsk_buf_alloc(addr, 2);
         if(dst) {
             *((uint16_t *) dst) = value;
         }
@@ -342,6 +333,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                 *((uint8_t *) tsk_dst[index]) = (uint8_t) value;
               } else if (size == sizeof(uint16_t)) {
                 *((unsigned *) tsk_dst[index]) = (uint16_t) value;
+                    //printf("Wrote %x\r\n",*((uint16_t *)tsk_dst[index]));
               } else if (size == sizeof(uint32_t)) {
                 *((uint32_t *) tsk_dst[index]) = (uint32_t) value;
               } else {
@@ -356,6 +348,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                     *((uint8_t *) dst) = (uint8_t) value;
                   } else if (size == sizeof(uint16_t)) {
                     *((unsigned *) dst) = (uint16_t) value;
+                    //printf("Wrote %x\r\n",*((uint16_t *)dst));
                   } else if (size == sizeof(uint32_t)) {
                     *((uint32_t *) dst) = (uint32_t) value;
                   } else {
@@ -407,7 +400,8 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
  */
 void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
   // First, if we're in an event, figure out if there's an ongoing transaction
-  switch(commit_type) {
+  LCG_PRINTF("commit_ph1 commit status: %u\r\n",curctx->commit_state);
+  switch(curctx->commit_state) {
     // We end up in the easy case if we finish a totally normal task
     case TSK_PH1:
       num_dtv = num_tbe;
@@ -419,18 +413,26 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
                           num_txread;
       new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
                           num_txwrite;
-      if(((tx_state *)curctx->extra_state)->tx_need_commit) {
-        new_ctx->commit_state = TX_COMMIT;
-      }
-      else {
-        new_ctx->commit_state = TSK_IN_TX_COMMIT;
-      }
+      new_ctx->commit_state = TX_COMMIT;
+      break;
+    case TSK_IN_TX_PH1:
+      num_dtv = num_tbe;
+      new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
+                          num_txread;
+      new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
+                          num_txwrite;
+      new_ctx->commit_state = TSK_IN_TX_COMMIT;
       break;
     case EV_PH1:
       num_dtv = num_tbe;
       new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
-                         num_tbe;
-      if(((tx_state *)thread_ctx->extra_state)->in_tx) {
+                         num_evbe;
+      
+      // Drop in transaction state from interrupted thread
+      new_ctx->extra_state = thread_ctx->extra_state;
+      new_ctx->task = thread_ctx->task;
+
+      if(((tx_state *)thread_ctx->extra_state)->in_tx == 0) {
         new_ctx->commit_state = EV_ONLY;
       }
       else {
@@ -442,7 +444,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       }
       break;
     default:
-      printf("Wrong type for ph1 commit!\r\n");
+      printf("Wrong type for ph1 commit! %u\r\n",curctx->commit_state);
       while(1);
     }
 }
@@ -454,8 +456,9 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
  * into consideration
  */
 void commit_phase2() {
-    while(curctx->commit_status != NO_COMMIT) {
-      switch(curctx->commit_status) {
+    while(curctx->commit_state != NO_COMMIT) {
+      LCG_PRINTF("commit state, inside = %u\r\n",curctx->commit_state);
+      switch(curctx->commit_state) {
         case TSK_COMMIT:
           tsk_commit_ph2();
           curctx->commit_state = NO_COMMIT;
@@ -470,21 +473,47 @@ void commit_phase2() {
         case TX_COMMIT:
           // Finish committing current tsk
           tsk_in_tx_commit_ph2();
-          // Changes commit_status to any one of the following
+          // Changes commit_state to any one of the following
           tx_commit_ph1_5();
           break;
+        case TX_ONLY:
+          ((tx_state *)curctx->extra_state)->num_read = 0;
+          ((tx_state *)curctx->extra_state)->num_write = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_write = 0;
+          tx_commit_ph2();
+          curctx->commit_state = NO_COMMIT;
+          break;
         case EV_ONLY:
+          ((tx_state *)curctx->extra_state)->num_read = 0;
+          ((tx_state *)curctx->extra_state)->num_write = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_write = 0;
           ev_commit_ph2();
           curctx->commit_state = NO_COMMIT;
           break;
         case TX_EV_COMMIT:
+          ((tx_state *)curctx->extra_state)->num_read = 0;
+          ((tx_state *)curctx->extra_state)->num_write = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_write = 0;
           tx_commit_ph2();
           ev_commit_ph2();
           curctx->commit_state = NO_COMMIT;
           break;
-        case EV_TX_commit:
+        case EV_TX_COMMIT:
+          ((tx_state *)curctx->extra_state)->num_read = 0;
+          ((tx_state *)curctx->extra_state)->num_write = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_write = 0;
           ev_commit_ph2();
           tx_commit_ph2();
+          curctx->commit_state = NO_COMMIT;
+          break;
+        // Catch here if we didn't finish phase 1
+        case TSK_PH1:
+        case TX_PH1:
+        case EV_PH1:
           curctx->commit_state = NO_COMMIT;
           break;
         default:
@@ -506,44 +535,51 @@ void commit_phase2() {
  */
 void transition_to(task_t *next_task)
 {
-   // disable event interrupts so we don't have to deal with them during
-   // transition
-    _disable_events();
+ // disable event interrupts so we don't have to deal with them during
+ // transition
+  _disable_events();
+  LCG_PRINTF("TT commit state = %u, in tx = %u, addr %x\r\n",curctx->commit_state,
+  ((tx_state *)curctx->extra_state)->in_tx, curctx->task->func);
+  context_t *next_ctx;
+  next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
 
-    context_t *next_ctx;
-    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
+  tx_state *new_tx_state;
+  new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
 
-    tx_state *new_tx_state;
-    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+  ev_state *new_ev_state;
+  new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                  &state_ev_0);
 
-    ev_state *new_ev_state;
-    new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
-                    &state_ev_0);
+  // Performs first phase of the commit depending on what kind of task we're
+  // in and sets up the next task n'at
+  commit_phase1(new_tx_state, new_ev_state, next_ctx);
+  
+  // Now point the next context
+  next_ctx->extra_state = new_tx_state;
+  next_ctx->extra_ev_state = new_ev_state;
+  next_ctx->task = next_task;
 
-    // Performs first phase of the commit depending on what kind of task we're
-    // in and sets up the next task n'at
-    commit_phase1(new_ev_state, new_tx_state,next_ctx);
+  curctx = next_ctx;
+  
+  LCG_PRINTF("TT starting commit_ph1 = %u\r\n",curctx->commit_state);
 
-    // Now plop those into the next context
-    next_ctx->extra_state = new_tx_state;
-    next_ctx->extra_ev_state = new_ev_state;
-    curctx = next_ctx;
+  // Run the second phase of commit
+  commit_phase2();
+  
+  LCG_PRINTF("Transitioning to %x\r\n",curctx->task->func);
 
-    // Run the second phase of commit
-    commit_phase2();
+  // Re-enable events if we're staying in the threads context, but leave them
+  // disabled if we're going into an event task
+  if(((ev_state *)curctx->extra_state)->in_ev == 0){
+    _enable_events();
+  }
 
-    // Re-enable events if we're staying in the threads context, but leave them
-    // disabled if we're going into an event task
-    if(((ev_state *)curctx->extra_state)->in_ev == 0){
-      _enable_events();
-    }
-
-    __asm__ volatile ( // volatile because output operands unused by C
-        "mov #0x2400, r1\n"
-        "br %[ntask]\n"
-        :
-        : [ntask] "r" (curctx->task->func)
-    );
+  __asm__ volatile ( // volatile because output operands unused by C
+      "mov #0x2400, r1\n"
+      "br %[ntask]\n"
+      :
+      : [ntask] "r" (curctx->task->func)
+  );
 
 }
 
@@ -557,16 +593,19 @@ int main() {
 
     _numBoots++;
 
+    LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
 
-    LCG_PRINTF("transitioning to %x \r\n",curctx->task->func);
-    LCG_PRINTF("tsk size = %i tx size = %i \r\n", NUM_DIRTY_ENTRIES, BUF_SIZE);
 
     // Run second phase of commit
     commit_phase2();
 
+    LCG_PRINTF("Done phase 2 commit\r\n");
     // enable events now that commit_phase2 is done
     _enable_events();
+
+    LCG_PRINTF("transitioning to %x %x \r\n",curctx->task->func,
+    (TASK_REF(_entry_task))->func);
 
     __asm__ volatile ( // volatile because output operands unused by C
         "br %[nt]\n"

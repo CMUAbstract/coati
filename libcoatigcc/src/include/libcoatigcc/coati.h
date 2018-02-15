@@ -28,18 +28,20 @@ typedef uint16_t field_mask_t;
 typedef unsigned task_idx_t;
 
 typedef enum {
-  NO_COMMIT,
-  TSK_COMMIT,
-  TSK_IN_TX_COMMIT,
-  TX_COMMIT,
-  TX_ONLY,
-  EV_COMMIT,
-  EV_ONLY,
-  TX_EV_COMMIT,
-  EV_TX_COMMIT,
-  EV_PH1,
-  TSK_PH1,
-  TX_PH1
+/*0*/  NO_COMMIT, 
+/*1*/  TSK_COMMIT,
+/*2*/  TSK_IN_TX_COMMIT,
+/*3*/  TX_COMMIT,
+/*4*/  TX_ONLY,
+/*5*/  EV_COMMIT,
+/*6*/  EV_FUTURE,
+/*7*/  EV_ONLY,
+/*8*/  TX_EV_COMMIT,
+/*9*/  EV_TX_COMMIT,
+/*10*/ EV_PH1,
+/*11*/ TSK_PH1,
+/*12*/ TX_PH1,
+/*13*/ TSK_IN_TX_PH1
 } commit;
 
 extern void *tsk_src[];
@@ -71,8 +73,6 @@ typedef struct _context_t {
 } context_t;
 
 extern context_t * volatile curctx;
-//extern context_t * volatile context_ptr0; 
-//extern context_t * volatile context_ptr1;
 extern context_t * volatile context_ptr0; 
 extern context_t * volatile context_ptr1;
 
@@ -133,7 +133,9 @@ extern task_t TASK_SYM_NAME(_entry_task);
  */
 #define ENTRY_TASK(task) \
     TASK(0, _entry_task) \
-    void _entry_task() { TRANSITION_TO(task); }
+    void _entry_task() {  curctx->commit_state = TSK_PH1; \
+                          TRANSITION_FIRST(task); \
+                       }
 
 /** @brief Init function prototype
  *  @details We rely on the special name of this symbol to initialize the
@@ -155,11 +157,14 @@ void transition_to(task_t *task);
 /** @brief Transfer control to the given task
  *  @param task     Name of the task function
  *  */
-#define TRANSITION_TO(task) transition_to(TASK_REF(task))
+#define TRANSITION_TO(task) \
+    curctx->commit_state = TSK_PH1;\
+    transition_to(TASK_REF(task))
+
+#define TRANSITION_FIRST(task) transition_to(TASK_REF(task))
 
 void * read(const void * addr, unsigned size, acc_type acc);
 void  write(const void *addr, unsigned size, acc_type acc, uint32_t value);
-int16_t tsk_find(const void *addr);
 void *internal_memcpy(void *dest, void *src, uint16_t num);
 
 /**
