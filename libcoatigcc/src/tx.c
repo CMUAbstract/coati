@@ -232,8 +232,10 @@ void tx_commit_ph1_5() {
         // Clear need_commit flag so we don't get in here again
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 0;
         curctx->commit_state = TX_ONLY;
+        LCG_CONF_REP("Conflict! Only committing tx\r\n");
       }
       else {
+        LCG_CONF_REP("No conflict! committing tx then ev\r\n");
         curctx->commit_state = TX_EV_COMMIT;
       }
     }
@@ -245,11 +247,13 @@ void tx_commit_ph1_5() {
     if(((ev_state *)curctx->extra_ev_state)->ev_need_commit) {
       conflict = compare_lists(ev_write_list, tx_read_list, num_evwrite, num_txread);
       if(conflict == 1) {
+        LCG_CONF_REP("Conflict! Only committing ev\r\n");
         // Clear need_commit flag so we don't get in here again
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 0;
         curctx->commit_state = EV_ONLY;
       }
       else {
+        LCG_CONF_REP("No conflict! committing ev then tx\r\n");
         curctx->commit_state = EV_TX_COMMIT;
       }
     }

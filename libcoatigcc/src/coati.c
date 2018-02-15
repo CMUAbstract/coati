@@ -59,10 +59,10 @@ static void tsk_commit_ph2(void);
  */
 void tsk_commit_ph2() {
   // Copy all commit list entries
-  printf("commit_ph2, committing %u entries\r\n",num_dtv);
+  LCG_PRINTF("commit_ph2, committing %u entries\r\n",num_dtv);
   while(num_dtv > 0)  {
     // Copy from dst in tsk buf to "home" for that variable
-    printf("Copying to %x\r\n",tsk_src[num_dtv-1]);
+    LCG_PRINTF("Copying to %x\r\n",tsk_src[num_dtv-1]);
     memcpy( tsk_src[num_dtv - 1],
             tsk_dst[num_dtv - 1],
             tsk_size[num_dtv - 1]
