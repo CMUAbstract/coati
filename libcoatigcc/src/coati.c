@@ -448,10 +448,12 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
     // We end up in the easy case if we finish a totally normal task
     case TSK_PH1:
       num_dtv = num_tbe;
+      new_ev->in_ev = 0;
       new_ctx->commit_state = TSK_COMMIT;
       break;
     case TX_PH1:
       num_dtv = num_tbe;
+      new_ev->in_ev = 0;
       new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
                           num_txread;
       new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
@@ -460,6 +462,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       break;
     case TSK_IN_TX_PH1:
       num_dtv = num_tbe;
+      new_ev->in_ev = 0;
       new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
                           num_txread;
       new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
@@ -469,6 +472,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       break;
     case EV_PH1:
       num_dtv = num_tbe;
+      new_ev->in_ev = 0;
       new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
                          num_evbe;
       
