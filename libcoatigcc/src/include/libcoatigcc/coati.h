@@ -28,7 +28,7 @@ typedef uint16_t field_mask_t;
 typedef unsigned task_idx_t;
 
 typedef enum {
-/*0*/  NO_COMMIT, 
+/*0*/  NO_COMMIT,
 /*1*/  TSK_COMMIT,
 /*2*/  TSK_IN_TX_COMMIT,
 /*3*/  TX_COMMIT,
@@ -51,6 +51,8 @@ extern uint8_t tsk_buf[];
 
 extern uint16_t volatile num_tbe;
 extern uint16_t num_dtv;
+
+extern volatile unsigned _numBoots;
 
 typedef struct {
     task_func_t *func;

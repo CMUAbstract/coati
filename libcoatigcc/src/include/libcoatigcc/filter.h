@@ -27,6 +27,8 @@ int compare_lists(void **, void **, uint16_t, uint16_t);
 
 int compare_filters(bloom_filter *, bloom_filter *);
 
+int check_list(void **, uint16_t, void *);
+
 void clear_filter(bloom_filter *);
 
 void print_filter(bloom_filter *);

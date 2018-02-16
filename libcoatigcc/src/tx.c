@@ -66,8 +66,10 @@ void set_serialize_after() {
  * @comments Needs to take effect AFTER task prologue
  */
 void tx_begin() {
-    ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
-    ((tx_state *)(curctx->extra_state))->in_tx = 1;
+    if(((tx_state *)(curctx->extra_state))->in_tx == 0) {
+      ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
+      ((tx_state *)(curctx->extra_state))->in_tx = 1;
+    }
     ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
     LCG_PRINTF("In tx begin!!\r\n");
     cur_tx_start = curctx->task;
@@ -90,10 +92,16 @@ void my_tx_begin() {
  */
 int16_t  tx_find(const void * addr) {
   uint16_t num_vars = ((tx_state *)curctx->extra_state)->num_dtxv;
+  LCG_PRINTF("num_vars = %x\r\n",num_vars);
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
-          if(addr == tx_src[i])
-              return i;
+        if(addr == tx_src[i]) {
+          LCG_PRINTF("Found addr: %x\r\n",addr);
+          return i;
+        }
+        else {
+          LCG_PRINTF("%x != %x\r\n",addr,tx_src[i]);
+        }
       }
     }
     return -1;
@@ -121,12 +129,15 @@ void *  tx_get_dst(void * addr) {
 void tsk_in_tx_commit_ph2() {
   uint16_t num_tx_vars =((tx_state *)(curctx->extra_state))->num_dtxv;
   uint16_t i = 0;
+  //LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);
   LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);
   // Cycle through all the variables to commit
   while(num_dtv > 0) {
     void *dst = tx_get_dst(tsk_src[num_dtv - 1]);
     if(dst != NULL) {
-        LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
+        //LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
+        LCG_PRINTF("Copying %x from %x to %x, %x bytes \r\n",
+                    tsk_src[num_dtv -1],
                     ((uint8_t *)tsk_dst[num_dtv - 1]),
                     dst,
                     tsk_size[num_dtv-1]);
@@ -138,15 +149,20 @@ void tsk_in_tx_commit_ph2() {
     else{
       LCG_PRINTF("Not found! allocing!\r\n");
       void *dst_alloc = tx_buf_alloc(tsk_src[num_dtv -1],
-                                     tsk_size[num_dtv - 1]);
+                                     tsk_size[num_dtv -1]);
       if(dst_alloc == NULL) {
         LCG_PRINTF("Error allocating to tx buff\r\n");
         while(1);
       }
-        LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
+        //LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
+        LCG_PRINTF("Copying %u %x from %x to %x, %x bytes \r\n",
+                    *((uint16_t *)tsk_dst[num_dtv - 1]),
+                    tsk_src[num_dtv -1],
                     ((uint16_t *)tsk_dst[num_dtv - 1]),
                     dst_alloc,
                     tsk_size[num_dtv-1]);
+        LCG_PRINTF("New num dtxv = %x\r\n",
+                ((tx_state *)curctx->extra_state)->num_dtxv);
       memcpy( dst_alloc,
               tsk_dst[num_dtv - 1],
               tsk_size[num_dtv - 1]

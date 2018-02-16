@@ -99,3 +99,11 @@ int compare_lists(void **ser1, void **ser2, uint16_t len1, uint16_t len2) {
   }
   return 0;
 }
+
+int check_list(void **list, uint16_t len, void * addr) {
+  for(uint16_t i = 0; i < len; i++) {
+    if((void *)list[i] == addr)
+      return 1;
+  }
+  return 0;
+}

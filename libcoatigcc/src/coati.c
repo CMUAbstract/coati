@@ -138,17 +138,27 @@ void * read(const void *addr, unsigned size, acc_type acc) {
     uint16_t read_cnt;
     switch(acc) {
         case EVENT:
-            // first check buffer for value
-            index = ev_find(addr);
             // add the address to the read list
             read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
             read_cnt += num_evread;
             if(read_cnt >= NUM_DIRTY_ENTRIES) {
-              printf("Out of space in ev read list!\r\n");
-              while(1);
+              int test = 0;
+              // A bit of a cheat to keep the usual overhead low if you're
+              // accessing the same memory in a task. This could all be obviated
+              // by a compiler pass that determined the maximum number of reads
+              // that are possible.
+              test = check_list(ev_read_list, read_cnt, addr);
+              if(!test) {
+                LCG_PRINTF("Out of space in ev read list!\r\n");
+                while(1);
+              }
             }
-            ev_read_list[read_cnt] = (void *) addr;
-            num_evread++;
+            else {
+              ev_read_list[read_cnt] = (void *) addr;
+              num_evread++;
+            }
+            // first check buffer for value
+            index = ev_find(addr);
             // Now pull the memory from somewhere
             LCG_PRINTF("ev index = %u \r\n", index);
             if(index > -1) {
@@ -178,17 +188,25 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             break;
         case TX:
             // Add to read filter for tx
+            LCG_PRINTF("TX READ %x\r\n",addr);
             read_cnt = ((tx_state *)curctx->extra_state)->num_read;
             read_cnt += num_txread;
             if(read_cnt >= NUM_DIRTY_ENTRIES) {
-              printf("Out of space in tx read list!\r\n");
-              while(1);
+              int test = 0;
+              test = check_list(tx_read_list, read_cnt, addr);
+              if(!test) {
+                printf("Out of space in tx read list!\r\n");
+                while(1);
+              }
             }
-            tx_read_list[read_cnt] = (void *) addr;
-            num_txread++;
+            else {
+              tx_read_list[read_cnt] = (void *) addr;
+              num_txread++;
+            }
             // check tsk buf
             index = tsk_find(addr);
             if(index > -1) {
+                LCG_PRINTF("Found %x in tsk buf!\r\n",addr);
                 dst = (void *) tsk_dst[index];
             }
             else {
@@ -196,10 +214,12 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 LCG_PRINTF("Checking tx buf\r\n");
                 index = tx_find(addr);
                 if(index > -1) {
+                    LCG_PRINTF("Found %x in tx buf!\r\n",addr);
                     dst = (void *) tx_dst[index];
                 }
                 // Not in tx buf either, return main memory addr
                 else {
+                    LCG_PRINTF("Back to main mem\r\n");
                     dst = (void *) addr;
                 }
             }
@@ -277,11 +297,22 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             write_cnt = ((ev_state *)curctx->extra_ev_state)->num_write;
             write_cnt += num_evwrite;
             if(write_cnt >= NUM_DIRTY_ENTRIES) {
-              printf("Out of space in write list!\r\n");
-              while(1);
+              int test = 0;
+              // A bit of a cheat to keep the usual overhead low if you're
+              // accessing the same memory in a task. This could all be obviated
+              // by a compiler pass that determined the maximum number of reads
+              // that are possible.
+              test = check_list(ev_write_list, write_cnt, addr);
+              if(!test) {
+                printf("Out of space in ev write list!\r\n");
+                while(1);
+              }
             }
-            ev_write_list[write_cnt] = addr;
-            num_evwrite++;
+            else {
+              ev_write_list[write_cnt] = (void *) addr;
+              num_evwrite++;
+            }
+            // Check if addr is already in buffer
             index = ev_find(addr);
             if(index > -1) {
               if (size == sizeof(uint8_t)) {
@@ -320,11 +351,17 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             write_cnt = ((tx_state *)curctx->extra_state)->num_write;
             write_cnt += num_txwrite;
             if(write_cnt >= NUM_DIRTY_ENTRIES) {
-              printf("Out of space in read buff!\r\n");
-              while(1);
+              int test = 0;
+              test = check_list(tx_write_list, write_cnt, addr);
+              if(!test) {
+                printf("Out of space in tx write list!\r\n");
+                while(1);
+              }
             }
-            tx_write_list[write_cnt] = addr;
-            num_txwrite++;
+            else {
+              tx_write_list[write_cnt] = (void *) addr;
+              num_txwrite++;
+            }
             // Intentional fall through
         case NORMAL:
             index = tsk_find(addr);
@@ -343,7 +380,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             }
             else {
                 void * dst = tsk_buf_alloc(addr, size);
-                if(dst) {
+                if(dst != NULL) {
                   if (size == sizeof(char)) {
                     *((uint8_t *) dst) = (uint8_t) value;
                   } else if (size == sizeof(uint16_t)) {
@@ -399,8 +436,14 @@ void *internal_memcpy(void *dest, void *src, uint16_t num) {
  * state we're changing
  */
 void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
-  // First, if we're in an event, figure out if there's an ongoing transaction
   LCG_PRINTF("commit_ph1 commit status: %u\r\n",curctx->commit_state);
+  // First copy over the old tx_state and ev_states
+  *new_tx = *((tx_state *) curctx->extra_state);
+  *new_ev = *((ev_state *) curctx->extra_ev_state);
+  LCG_PRINTF("Sanity check1: %x %x, %x %x\r\n",new_tx->num_read,
+                                ((tx_state*)curctx->extra_state)->num_read,
+                                new_ev->num_read,
+                                ((tx_state*)curctx->extra_state)->num_read);
   switch(curctx->commit_state) {
     // We end up in the easy case if we finish a totally normal task
     case TSK_PH1:
@@ -421,6 +464,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
                           num_txread;
       new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
                           num_txwrite;
+      new_tx->num_dtxv = ((tx_state *)curctx->extra_state)->num_dtxv;
       new_ctx->commit_state = TSK_IN_TX_COMMIT;
       break;
     case EV_PH1:
@@ -447,6 +491,10 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       printf("Wrong type for ph1 commit! %u\r\n",curctx->commit_state);
       while(1);
     }
+  LCG_PRINTF("Sanity check2: %x %x, %x %x\r\n",new_tx->num_dtxv,
+                                ((tx_state*)curctx->extra_state)->num_dtxv,
+                                new_ev->num_read,
+                                ((tx_state*)curctx->extra_state)->num_read);
 }
 
 /**
@@ -560,7 +608,8 @@ void transition_to(task_t *next_task)
   next_ctx->task = next_task;
 
   curctx = next_ctx;
-  
+
+  LCG_PRINTF("Got %x num_dtxv\r\n",((tx_state *)curctx->extra_state)->num_dtxv); 
   LCG_PRINTF("TT starting commit_ph1 = %u\r\n",curctx->commit_state);
 
   // Run the second phase of commit
