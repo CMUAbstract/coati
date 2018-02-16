@@ -67,6 +67,7 @@ void set_serialize_after() {
  */
 void tx_begin() {
     if(((tx_state *)(curctx->extra_state))->in_tx == 0) {
+      printf("Zeroing num_dtxv!!!\r\n");
       ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
       ((tx_state *)(curctx->extra_state))->in_tx = 1;
     }
@@ -92,7 +93,8 @@ void my_tx_begin() {
  */
 int16_t  tx_find(const void * addr) {
   uint16_t num_vars = ((tx_state *)curctx->extra_state)->num_dtxv;
-  LCG_PRINTF("num_vars = %x\r\n",num_vars);
+  //LCG_PRINTF("num_vars = %x\r\n",num_vars);
+  printf("num_vars = %x\r\n",num_vars);
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
         if(addr == tx_src[i]) {
@@ -215,8 +217,10 @@ void * tx_buf_alloc(void * addr, size_t size) {
  * @notes uhh, this sucker runs regardless... this could be bad
  */
 void tx_commit_ph2() {
+  printf("Running tx_commit_ph2\r\n");
   while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
     uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
+    printf("num_dtxv =%u\r\n",num_dtxv);
     LCG_PRINTF("Copying from %x to %x \r\n",
               tx_dst[num_dtxv - 1],
               tx_src[num_dtxv-1]);

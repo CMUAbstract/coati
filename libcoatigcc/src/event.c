@@ -71,11 +71,11 @@ void event_handler(context_t *new_event_ctx) {
     // it'll just get rewritten if we power down
     ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
         ((ev_state *)curctx->extra_ev_state)->num_devv;
-    LCG_PRINTF("In event handler! coming from %x \r\n",curctx->task->func);
+    printf("In event handler! coming from %x \r\n",curctx->task->func);
 
     // Point threads' context at current context
     thread_ctx=curctx;
-    LCG_PRINTF("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
+    printf("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
     ((tx_state *)thread_ctx->extra_state)->in_tx);
 
     // Set curctx with prepackaged event_ctx

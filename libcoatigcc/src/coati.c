@@ -477,13 +477,16 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
                          num_evbe;
       
       // Drop in transaction state from interrupted thread
-      new_ctx->extra_state = thread_ctx->extra_state;
+      // Copy the ev contents though
+      *new_tx = *((tx_state *)thread_ctx->extra_state);
       new_ctx->task = thread_ctx->task;
 
       if(((tx_state *)thread_ctx->extra_state)->in_tx == 0) {
+        printf("Only committing ev!\r\n");
         new_ctx->commit_state = EV_ONLY;
       }
       else {
+        printf("thread is in tx!\r\n");
         new_ev->num_read = ((ev_state *)curctx->extra_ev_state)->num_read +
                            num_evread;
         new_ev->num_write = ((ev_state *)curctx->extra_ev_state)->num_write +
@@ -509,7 +512,11 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
  */
 void commit_phase2() {
     while(curctx->commit_state != NO_COMMIT) {
-      LCG_PRINTF("commit state, inside = %u\r\n",curctx->commit_state);
+      //LCG_PRINTF("commit state, inside = %u\r\n",curctx->commit_state);
+      printf("commit state, inside = %u, in ev= %u, in tx= %u\r\n",
+                                                    curctx->commit_state,
+                            ((ev_state *)curctx->extra_ev_state)->in_ev,
+                            ((tx_state *)curctx->extra_state)->in_tx);
       switch(curctx->commit_state) {
         case TSK_COMMIT:
           tsk_commit_ph2();
@@ -517,11 +524,13 @@ void commit_phase2() {
           break;
         case TSK_IN_TX_COMMIT:
           tsk_in_tx_commit_ph2();
+          printf("dtxv = %u\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
           curctx->commit_state = NO_COMMIT;
           break;
         case EV_FUTURE:
           ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
           curctx->commit_state = NO_COMMIT;
+          break;
         case TX_COMMIT:
           // Finish committing current tsk
           tsk_in_tx_commit_ph2();
@@ -592,15 +601,25 @@ void transition_to(task_t *next_task)
   _disable_events();
   LCG_PRINTF("TT commit state = %u, in tx = %u, addr %x\r\n",curctx->commit_state,
   ((tx_state *)curctx->extra_state)->in_tx, curctx->task->func);
+  
   context_t *next_ctx;
-  next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
-
   tx_state *new_tx_state;
-  new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
-
   ev_state *new_ev_state;
-  new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
-                  &state_ev_0);
+  // Point next context at the thread if we're returning from an ev
+  if(((ev_state *)curctx->extra_ev_state)->in_ev) {
+    printf("Setting up thread!\r\n");
+    next_ctx = thread_ctx;
+    new_tx_state = (thread_ctx->extra_state == &state_0 ? &state_1 : &state_0);
+    new_ev_state = (thread_ctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                    &state_ev_0);
+  }
+  else {
+    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
+    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+
+    new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                    &state_ev_0);
+  }
 
   // Performs first phase of the commit depending on what kind of task we're
   // in and sets up the next task n'at
@@ -623,9 +642,11 @@ void transition_to(task_t *next_task)
 
   // Re-enable events if we're staying in the threads context, but leave them
   // disabled if we're going into an event task
-  if(((ev_state *)curctx->extra_state)->in_ev == 0){
-    _enable_events();
-  }
+  //if(((ev_state *)curctx->extra_state)->in_ev == 0){
+  // Given that we never explicitly transition to and event, there shoudln't be
+  // a check that we're in an event.
+  _enable_events();
+  //}
 
   __asm__ volatile ( // volatile because output operands unused by C
       "mov #0x2400, r1\n"
