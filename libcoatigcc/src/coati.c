@@ -512,8 +512,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
  */
 void commit_phase2() {
     while(curctx->commit_state != NO_COMMIT) {
-      //LCG_PRINTF("commit state, inside = %u\r\n",curctx->commit_state);
-      printf("commit state, inside = %u, in ev= %u, in tx= %u\r\n",
+      LCG_PRINTF("commit state, inside = %u, in ev= %u, in tx= %u\r\n",
                                                     curctx->commit_state,
                             ((ev_state *)curctx->extra_ev_state)->in_ev,
                             ((tx_state *)curctx->extra_state)->in_tx);
@@ -524,7 +523,7 @@ void commit_phase2() {
           break;
         case TSK_IN_TX_COMMIT:
           tsk_in_tx_commit_ph2();
-          printf("dtxv = %u\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
+          LCG_PRINTF("dtxv = %u\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
           curctx->commit_state = NO_COMMIT;
           break;
         case EV_FUTURE:
@@ -607,7 +606,7 @@ void transition_to(task_t *next_task)
   ev_state *new_ev_state;
   // Point next context at the thread if we're returning from an ev
   if(((ev_state *)curctx->extra_ev_state)->in_ev) {
-    printf("Setting up thread!\r\n");
+    LCG_PRINTF("Setting up thread!\r\n");
     next_ctx = thread_ctx;
     new_tx_state = (thread_ctx->extra_state == &state_0 ? &state_1 : &state_0);
     new_ev_state = (thread_ctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :

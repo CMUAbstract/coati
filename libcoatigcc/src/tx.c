@@ -94,7 +94,7 @@ void my_tx_begin() {
 int16_t  tx_find(const void * addr) {
   uint16_t num_vars = ((tx_state *)curctx->extra_state)->num_dtxv;
   //LCG_PRINTF("num_vars = %x\r\n",num_vars);
-  printf("num_vars = %x\r\n",num_vars);
+  LCG_PRINTF("num_vars = %x\r\n",num_vars);
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
         if(addr == tx_src[i]) {
@@ -217,10 +217,10 @@ void * tx_buf_alloc(void * addr, size_t size) {
  * @notes uhh, this sucker runs regardless... this could be bad
  */
 void tx_commit_ph2() {
-  printf("Running tx_commit_ph2\r\n");
+  LCG_PRINTF("Running tx_commit_ph2\r\n");
   while(((tx_state *)(curctx->extra_state))->num_dtxv > 0) {
     uint16_t num_dtxv =((tx_state *)(curctx->extra_state))->num_dtxv;
-    printf("num_dtxv =%u\r\n",num_dtxv);
+    LCG_PRINTF("num_dtxv =%u\r\n",num_dtxv);
     LCG_PRINTF("Copying from %x to %x \r\n",
               tx_dst[num_dtxv - 1],
               tx_src[num_dtxv-1]);
@@ -247,7 +247,10 @@ void tx_commit_ph1_5() {
   // Default setting
   if(((tx_state *)(curctx->extra_state))->serialize_after == 0) {
     if(((ev_state *)curctx->extra_ev_state)->ev_need_commit) {
-      conflict = compare_lists(ev_read_list, tx_write_list, num_evread, num_txwrite);
+      uint16_t ev_len = 0, tx_len = 0;
+      ev_len = ((ev_state *)curctx->extra_ev_state)->num_read;
+      tx_len = ((tx_state *)curctx->extra_state)->num_write;
+      conflict = compare_lists(ev_read_list, tx_write_list, ev_len, tx_len);
       if(conflict == 1) {
         // Clear need_commit flag so we don't get in here again
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 0;
@@ -265,7 +268,10 @@ void tx_commit_ph1_5() {
   }
   else {
     if(((ev_state *)curctx->extra_ev_state)->ev_need_commit) {
-      conflict = compare_lists(ev_write_list, tx_read_list, num_evwrite, num_txread);
+      uint16_t ev_len = 0, tx_len = 0;
+      ev_len = ((ev_state *)curctx->extra_ev_state)->num_write;
+      tx_len = ((tx_state *)curctx->extra_state)->num_read;
+      conflict = compare_lists(ev_write_list, tx_read_list, ev_len, tx_len);
       if(conflict == 1) {
         LCG_CONF_REP("Conflict! Only committing ev\r\n");
         // Clear need_commit flag so we don't get in here again
