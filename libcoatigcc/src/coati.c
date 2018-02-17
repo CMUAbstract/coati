@@ -574,10 +574,12 @@ void commit_phase2() {
         case TSK_PH1:
         case TX_PH1:
         case EV_PH1:
+        case TSK_IN_TX_PH1:
           curctx->commit_state = NO_COMMIT;
           break;
         default:
-          printf("Error! incorrect phase2 commit value\r\n");
+          printf("Error! incorrect phase2 commit value: %x\r\n",
+                                                  curctx->commit_state);
           while(1);
       }
     }

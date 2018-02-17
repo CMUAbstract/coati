@@ -2,6 +2,13 @@
 #include <stdio.h>
 #include <assert.h>
 
+#ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
+#define LCG_PRINTF(...)
+#else
+#include <stdio.h>
+#define LCG_PRINTF printf
+#endif
+
 /* mod needs to be a power of 2 for this to work */
 unsigned my_modulus(unsigned value_in, unsigned mod){
   // Brian Kernigan hack to determine if a number is a power of two
