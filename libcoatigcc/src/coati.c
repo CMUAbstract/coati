@@ -482,11 +482,11 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       new_ctx->task = thread_ctx->task;
 
       if(((tx_state *)thread_ctx->extra_state)->in_tx == 0) {
-        printf("Only committing ev!\r\n");
+        LCG_PRINTF("Only committing ev!\r\n");
         new_ctx->commit_state = EV_ONLY;
       }
       else {
-        printf("thread is in tx!\r\n");
+        LCG_PRINTF("thread is in tx!\r\n");
         new_ev->num_read = ((ev_state *)curctx->extra_ev_state)->num_read +
                            num_evread;
         new_ev->num_write = ((ev_state *)curctx->extra_ev_state)->num_write +

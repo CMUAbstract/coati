@@ -67,7 +67,7 @@ void set_serialize_after() {
  */
 void tx_begin() {
     if(((tx_state *)(curctx->extra_state))->in_tx == 0) {
-      printf("Zeroing num_dtxv!!!\r\n");
+      LCG_PRINTF("Zeroing num_dtxv!!!\r\n");
       ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
       ((tx_state *)(curctx->extra_state))->in_tx = 1;
     }

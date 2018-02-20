@@ -67,7 +67,7 @@ int compare_filters(bloom_filter *A, bloom_filter *B){
 		return -1;
 	// cycle through each byte and compare
 	for(size_t i = 0; i < A->size >> 3; i++){
-		printf("A[%u] = %x B[%u] = %x\r\n",i,A->bits[i],i,B->bits[i]);
+		LCG_PRINTF("A[%u] = %x B[%u] = %x\r\n",i,A->bits[i],i,B->bits[i]);
     if(A->bits[i] & B->bits[i])
 			return 1;
 	}
