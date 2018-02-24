@@ -59,6 +59,7 @@ static void tsk_commit_ph2(void);
  */
 void tsk_commit_ph2() {
   // Copy all commit list entries
+  LCG_PRINTF("ph2: num_dtv = %u\r\n",num_dtv);
   LCG_PRINTF("commit_ph2, committing %u entries\r\n",num_dtv);
   while(num_dtv > 0)  {
     // Copy from dst in tsk buf to "home" for that variable
@@ -450,6 +451,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       num_dtv = num_tbe;
       new_ev->in_ev = 0;
       new_ctx->commit_state = TSK_COMMIT;
+      LCG_PRINTF("num_dtv = %u\r\n",num_dtv);
       break;
     case TX_PH1:
       num_dtv = num_tbe;
