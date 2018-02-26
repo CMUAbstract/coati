@@ -7,6 +7,7 @@
 #include "filter.h"
 #include "tx.h"
 #include "event.h"
+#include <signal.h>
 
 #ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
 #define LCG_PRINTF(...)
@@ -46,6 +47,7 @@ __nv ev_state state_ev_0 = {
  */
 void event_handler(context_t *new_event_ctx) {
     // Disable all event interrupts
+    __enable_interrupt();
     _disable_events();
     LCG_PRINTF("in event handler!\r\n");
     // Quick sanity check to make sure context hasn't been corrupted... if we're
@@ -77,7 +79,7 @@ void event_handler(context_t *new_event_ctx) {
     thread_ctx=curctx;
     LCG_PRINTF("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
     ((tx_state *)thread_ctx->extra_state)->in_tx);
-
+    //printf("SR:%x\r\n",READ_SP);
     // Set curctx with prepackaged event_ctx
     curctx = new_event_ctx;
     __asm__ volatile ( // volatile because output operands unused by C
