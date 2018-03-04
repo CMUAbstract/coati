@@ -60,6 +60,8 @@ void event_handler(context_t *new_event_ctx) {
     // Clear commit flag for this context
     // TODO add in some error checking
     ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = 0;
+    ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
+                                ((ev_state *)curctx->extra_ev_state)->num_devv;
     // Clear event buffer counters but don't turn on curctx->in_ev! If we died
     // after seeting that, events would continously be disabled and they'd never
     // get turned back on

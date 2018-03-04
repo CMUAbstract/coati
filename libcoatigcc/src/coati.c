@@ -456,6 +456,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
     case TX_PH1:
       num_dtv = num_tbe;
       new_ev->in_ev = 0;
+      new_tx->in_tx = 0;
       new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
                           num_txread;
       new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
@@ -553,6 +554,8 @@ void commit_phase2() {
           ((ev_state *)curctx->extra_ev_state)->num_write = 0;
           ev_commit_ph2();
           curctx->commit_state = NO_COMMIT;
+          LCG_PRINTF("num_devv = %u\r\n",
+                              ((ev_state *)curctx->extra_ev_state)->num_devv);
           break;
         case TX_EV_COMMIT:
           ((tx_state *)curctx->extra_state)->num_read = 0;
