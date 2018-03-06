@@ -544,6 +544,7 @@ void commit_phase2() {
           ((tx_state *)curctx->extra_state)->num_write = 0;
           ((ev_state *)curctx->extra_ev_state)->num_read = 0;
           ((ev_state *)curctx->extra_ev_state)->num_write = 0;
+          ((ev_state *)curctx->extra_ev_state)->num_devv = 0;
           tx_commit_ph2();
           curctx->commit_state = NO_COMMIT;
           break;
