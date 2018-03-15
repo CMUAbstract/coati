@@ -256,6 +256,8 @@ void tx_commit_ph1_5() {
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 0;
         curctx->commit_state = TX_ONLY;
         LCG_CONF_REP("Conflict! Only committing tx\r\n");
+        _numEvents_uncommitted++;
+
       }
       else {
         LCG_CONF_REP("No conflict! committing tx then ev\r\n");

@@ -40,6 +40,8 @@ __nv ev_state state_ev_0 = {
 };
 
 
+// For instrumentation
+__nv uint16_t _numEvents_uncommitted = 0;
 
 /*
  * @brief function to act as interrupt handler when an event interrupt is

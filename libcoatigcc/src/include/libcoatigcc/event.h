@@ -18,6 +18,9 @@ typedef struct _ev_state {
     uint8_t ev_need_commit;
 } ev_state;
 
+// For instrumentation
+extern uint16_t _numEvents_uncommitted;
+
 extern volatile uint16_t num_evbe;
 extern volatile uint16_t num_evread;
 
