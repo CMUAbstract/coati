@@ -631,7 +631,7 @@ void transition_to(task_t *next_task)
   // Performs first phase of the commit depending on what kind of task we're
   // in and sets up the next task n'at
   commit_phase1(new_tx_state, new_ev_state, next_ctx);
-  
+
   // Now point the next context
   next_ctx->extra_state = new_tx_state;
   next_ctx->extra_ev_state = new_ev_state;
@@ -644,7 +644,7 @@ void transition_to(task_t *next_task)
 
   // Run the second phase of commit
   commit_phase2();
-  
+
   LCG_PRINTF("Transitioning to %x\r\n",curctx->task->func);
 
   // Re-enable events if we're staying in the threads context, but leave them
@@ -677,10 +677,21 @@ int main() {
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
 
-
-    // Run second phase of commit
-    commit_phase2();
-
+    // Check if we're in an event
+    // TODO: task the fluff out of this so it's not so bulky. Most of
+    // transition_to doesn't apply in this case
+    if(((ev_state *)curctx->extra_ev_state)->in_ev) {
+      // Safe to manipulate the commit state b/c all of the volatile counters
+      // have been cleared from the failed run
+      curctx->commit_state = EV_PH1;
+      // Just run this so all of the state needed for future events running
+      // inside the same tx and all that will get transferred.
+      transition_to(thread_ctx->task);
+    }
+    else {
+      // Run second phase of commit
+      commit_phase2();
+    }
     LCG_PRINTF("Done phase 2 commit\r\n");
     // enable events now that commit_phase2 is done
     _enable_events();
