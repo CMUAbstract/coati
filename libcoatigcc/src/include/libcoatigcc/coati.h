@@ -11,13 +11,14 @@
 #define TASK_NAME_SIZE 32
 
 #ifndef LIBCOATIGCC_PER_TSK_BUF_SIZE
+  #pragma message "PER TSK_BUF UNDEF"
   #define NUM_DIRTY_ENTRIES 16
 #else
+  #pragma message "PER TSK_BUF DEF"
   #define NUM_DIRTY_ENTRIES LIBCOATIGCC_PER_TSK_BUF_SIZE
 #endif
 
-#ifndef LIBCOATIGCC_CTX_BUF_SIZE
-  #define BUF_SIZE 32
+#ifndef LIBCOATIGCC_CTX_BUF_SIZE #define BUF_SIZE 32
 #else
   #define BUF_SIZE LIBCOATIGCC_CTX_BUF_SIZE
 #endif
@@ -57,6 +58,10 @@ extern volatile unsigned _numBoots;
 typedef struct {
     task_func_t *func;
     task_idx_t idx;
+
+#ifdef LIBCOATIGCC_ATOMICS
+    int atomic;
+#endif
     char name[TASK_NAME_SIZE];
 } task_t;
 
@@ -81,6 +86,9 @@ extern context_t * volatile context_ptr1;
 /** @brief Internal macro for constructing name of task symbol */
 #define TASK_SYM_NAME(func) _task_ ## func
 
+/** @brief Macro to reference a task by subbing in the internal name */
+#define TASK_REF(func) &TASK_SYM_NAME(func)
+
 /** @brief Declare a task
  *
  *  @param idx      Global task index, zero-based
@@ -100,8 +108,33 @@ extern context_t * volatile context_ptr1;
     void func(); \
     __nv task_t TASK_SYM_NAME(func) = { func, idx, #func }; \
 
-#define TASK_REF(func) &TASK_SYM_NAME(func)
+/** @brief Declare a task and the status of the atomic bit if we're using
+ * atomics
+ *
+ *  @param idx      Global task index, zero-based
+ *  @param func     Pointer to task function
+ *  @param atomic   Integer (0/1) indicating if events should be disabled during
+ *                  this task
+ */
 
+#ifndef LIBCOATIGCC_ATOMICS
+#pragma message "not adding atomics!!"
+
+#else
+#pragma message "adding atomics!!"
+
+#undef TASK
+
+#define TASK(idx, func) \
+    void func(); \
+    __nv task_t TASK_SYM_NAME(func) = { func, idx, 0, #func };
+
+#define ATOMIC_TASK(idx, func) \
+    void func(); \
+    __nv task_t TASK_SYM_NAME(func) = { func, idx, 1, #func };
+
+
+#endif
 /** @brief Function called on every reboot
  *  @details This function usually initializes hardware, such as GPIO
  *           direction. The application must define this function.

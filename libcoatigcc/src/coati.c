@@ -693,8 +693,18 @@ int main() {
       commit_phase2();
     }
     LCG_PRINTF("Done phase 2 commit\r\n");
-    // enable events now that commit_phase2 is done
-    _enable_events();
+    // enable events (or don't because we're in an atomic region) now that
+    // commit_phase2 is done
+    #ifdef LIBCOATIGCC_ATOMICS
+      if(curctx->task->atomic == 0) {
+        _enable_events();
+      }
+      else {
+        _disable_events();
+      }
+    #else
+      _enable_events();
+    #endif
 
     LCG_PRINTF("transitioning to %x %x \r\n",curctx->task->func,
     (TASK_REF(_entry_task))->func);
