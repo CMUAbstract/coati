@@ -191,7 +191,9 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             // Add to read filter for tx
             LCG_PRINTF("TX READ %x\r\n",addr);
             read_cnt = ((tx_state *)curctx->extra_state)->num_read;
+            //printf("RC, NUM_TXR: %u %u\r\n",read_cnt, num_txread);
             read_cnt += num_txread;
+            #ifndef LIBCOATIGCC_CHECK_ALL_TX
             if(read_cnt >= NUM_DIRTY_ENTRIES) {
               int test = 0;
               test = check_list(tx_read_list, read_cnt, addr);
@@ -204,6 +206,21 @@ void * read(const void *addr, unsigned size, acc_type acc) {
               tx_read_list[read_cnt] = (void *) addr;
               num_txread++;
             }
+            #else
+              int test = 0;
+              test = check_list(tx_read_list,read_cnt,addr);
+              /*if(test) {
+                printf("Seen before!\r\n");
+              }*/
+              if(!test && (read_cnt >= NUM_DIRTY_ENTRIES)) {
+                printf("Really out of space in tx read list\r\n");
+                while(1);
+              }
+              if(!test) {
+                tx_read_list[read_cnt] = (void *) addr;
+                num_txread++;
+              }
+            #endif
             // check tsk buf
             index = tsk_find(addr);
             if(index > -1) {
@@ -351,6 +368,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             // Inc number of variables written
             write_cnt = ((tx_state *)curctx->extra_state)->num_write;
             write_cnt += num_txwrite;
+            #ifndef LIBCOATIGCC_CHECK_ALL_TX
             if(write_cnt >= NUM_DIRTY_ENTRIES) {
               int test = 0;
               test = check_list(tx_write_list, write_cnt, addr);
@@ -363,6 +381,22 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               tx_write_list[write_cnt] = (void *) addr;
               num_txwrite++;
             }
+            #else
+              int test = 0;
+              test = check_list(tx_write_list,write_cnt,addr);
+              if(!test && (write_cnt >= NUM_DIRTY_ENTRIES)) {
+                printf("Really out of space in tx write %u\r\n", addr);
+                /*for(int i = 0; i < write_cnt; i++) {
+                  printf("%u\r\n",tx_write_list[i]);
+                }*/
+                while(1);
+              }
+              if(!test) {
+                tx_write_list[write_cnt] = (void *) addr;
+                num_txwrite++;
+              }
+            #endif // CHECK_ALL_TX
+
             // Intentional fall through
         case NORMAL:
             index = tsk_find(addr);
@@ -459,8 +493,10 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       new_tx->in_tx = 0;
       new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
                           num_txread;
-      new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
+      new_tx->num_write = ((tx_state *)curctx->extra_state)->num_write +
                           num_txwrite;
+      num_txwrite = 0;
+      num_txread = 0;
       new_ctx->commit_state = TX_COMMIT;
       break;
     case TSK_IN_TX_PH1:
@@ -468,8 +504,10 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       new_ev->in_ev = 0;
       new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
                           num_txread;
-      new_tx->num_write = ((tx_state *)curctx->extra_state)->num_read +
+      new_tx->num_write = ((tx_state *)curctx->extra_state)->num_write +
                           num_txwrite;
+      num_txwrite = 0;
+      num_txread = 0;
       new_tx->num_dtxv = ((tx_state *)curctx->extra_state)->num_dtxv;
       new_ctx->commit_state = TSK_IN_TX_COMMIT;
       break;
