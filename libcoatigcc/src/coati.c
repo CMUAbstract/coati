@@ -690,7 +690,20 @@ void transition_to(task_t *next_task)
   //if(((ev_state *)curctx->extra_state)->in_ev == 0){
   // Given that we never explicitly transition to and event, there shoudln't be
   // a check that we're in an event.
-  _enable_events();
+  // enable events (or don't because we're in an atomic region) now that
+  // commit_phase2 is done
+  #ifdef LIBCOATIGCC_ATOMICS
+    if(curctx->task->atomic == 0) {
+      LCG_PRINTF("not atomic\r\n");
+      _enable_events();
+    }
+    else {
+      LCG_PRINTF("atomic\r\n");
+      _disable_events();
+    }
+  #else
+    _enable_events();
+  #endif
   //}
 
   __asm__ volatile ( // volatile because output operands unused by C
@@ -735,9 +748,11 @@ int main() {
     // commit_phase2 is done
     #ifdef LIBCOATIGCC_ATOMICS
       if(curctx->task->atomic == 0) {
+        LCG_PRINTF("not atomic\r\n");
         _enable_events();
       }
       else {
+        LCG_PRINTF("atomic\r\n");
         _disable_events();
       }
     #else
