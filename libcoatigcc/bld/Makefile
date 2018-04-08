@@ -10,6 +10,7 @@ OBJECTS += \
   tx.o \
   filter.o\
   event.o \
+  top_half.o \
 
 
 DEPS += \

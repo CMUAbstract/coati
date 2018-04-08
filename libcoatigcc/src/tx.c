@@ -27,6 +27,7 @@ __nv void * tx_src[NUM_DIRTY_ENTRIES];
 __nv void * tx_dst[NUM_DIRTY_ENTRIES];
 __nv size_t tx_size[NUM_DIRTY_ENTRIES];
 
+#ifdef LIBCOATIGCC_BUFFER_ALL
 __nv void * tx_read_list[NUM_DIRTY_ENTRIES];
 __nv void * tx_write_list[NUM_DIRTY_ENTRIES];
 
@@ -34,20 +35,52 @@ __nv void * tx_write_list[NUM_DIRTY_ENTRIES];
 volatile uint16_t num_txread = 0;
 // volatile number of reads the transaction has performed
 volatile uint16_t num_txwrite = 0;
+#endif // BUFFER_ALL
+
 // volatile flat that indicates need to commit transaction
 volatile uint8_t need_tx_commit = 0;
 
 // Pointers to state that'll get used by transactions library
 __nv tx_state state_1 = {0};
 __nv tx_state state_0 = {
+    #ifdef LIBCOATIGCC_BUFFER_ALL
     .num_dtxv = 0,
     .num_read = 0,
     .num_write = 0,
+    #endif
     .in_tx = 0,
+    #ifdef LIBCOATIGCC_BUFFER_ALL
     .tx_need_commit = 0,
     .serialize_after = 0
+    #endif
 };
 
+
+
+/*
+ * @brief initializes state for a new tx
+ * @comments Needs to take effect AFTER task prologue
+ */
+void tx_begin() {
+    if(((tx_state *)(curctx->extra_state))->in_tx == 0) {
+    #ifdef LIBCOATIGCC_BUFFER_ALL
+      LCG_PRINTF("Zeroing num_dtxv!!!\r\n");
+      ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
+    #endif
+      ((tx_state *)(curctx->extra_state))->in_tx = 1;
+    }
+    #ifdef LIBCOATIGCC_BUFFER_ALL
+    cur_tx_start = curctx->task;
+    num_txread = 0;
+    num_txwrite = 0;
+    need_tx_commit = 0;
+    ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
+    #endif
+    LCG_PRINTF("In tx begin!!\r\n");
+}
+
+// We only call any of these functions if full buffering is in effect
+#ifdef LIBCOATIGCC_BUFFER_ALL
 /*
  * @brief sets the serialize after bit
  * @comments This makes the transaction will serialize after any concurrent
@@ -59,35 +92,6 @@ __nv tx_state state_0 = {
 void set_serialize_after() {
     ((tx_state *)(curctx->extra_state))->serialize_after = 1;
 }
-
-
-/*
- * @brief initializes state for a new tx
- * @comments Needs to take effect AFTER task prologue
- */
-void tx_begin() {
-    if(((tx_state *)(curctx->extra_state))->in_tx == 0) {
-      LCG_PRINTF("Zeroing num_dtxv!!!\r\n");
-      ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
-      ((tx_state *)(curctx->extra_state))->in_tx = 1;
-    }
-    ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
-    LCG_PRINTF("In tx begin!!\r\n");
-    cur_tx_start = curctx->task;
-    need_tx_commit = 0;
-    num_txread = 0;
-    num_txwrite = 0;
-}
-
-void my_tx_begin() {
-    ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
-    ((tx_state *)(curctx->extra_state))->in_tx = 1;
-    ((tx_state *)(curctx->extra_state))->tx_need_commit = 0;
-    LCG_PRINTF("In tx begin!!\r\n");
-    cur_tx_start = curctx->task;
-    need_tx_commit = 0;
-}
-
 /*
  * @brief returns the index into the tx buffers of where the data is located
  */
@@ -211,7 +215,6 @@ void * tx_buf_alloc(void * addr, size_t size) {
 }
 
 
-
 /*  
  * @brief write back to source on transaction commit
  * @notes uhh, this sucker runs regardless... this could be bad
@@ -314,4 +317,5 @@ void *tx_memcpy(void *dest, void *src, uint16_t num) {
   }
   return dest;
 }
+#endif // BUFFER_ALL
 

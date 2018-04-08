@@ -12,27 +12,41 @@
 
 typedef struct _ev_state {
     uint16_t num_devv;
+#ifdef LIBCOATIGCC_BUFFER_ALL
     uint16_t num_read;
     uint16_t num_write;
+#endif// BUFFER_ALL
     uint8_t in_ev;
+#ifdef LIBCOATIGCC_BUFFER_ALL
     uint8_t ev_need_commit;
+#else
+    uint8_t count;
+    uint8_t committed;
+#endif
 } ev_state;
 
 // For instrumentation
 extern uint16_t _numEvents_uncommitted;
 
 extern volatile uint16_t num_evbe;
+#ifdef LIBCOATIGCC_BUFFER_ALL
 extern volatile uint16_t num_evread;
+#endif// BUFFER_ALL
 
 extern ev_state state_ev_1;
 extern ev_state state_ev_0;
 
 extern context_t *thread_ctx;
+
+#ifdef LIBCOATIGCC_BUFFER_ALL
 extern task_t * cur_tx_start;
 extern void * ev_read_list[];
 extern void * ev_write_list[];
-
 void event_handler();
+#else
+extern void queued_event_handoff();
+#endif// BUFFER_ALL
+
 void ev_commit_ph2();
 
 int16_t  ev_find(const void * addr);
@@ -40,8 +54,10 @@ void *  ev_get_dst(void * addr);
 void * ev_buf_alloc(void * addr, size_t size);
 
 extern volatile uint16_t num_evbe;
+#ifdef LIBCOATIGCC_BUFFER_ALL
 extern volatile uint16_t num_evread;
 extern volatile uint16_t num_evwrite;
+#endif // BUFFER_ALL
 
 extern __nv uint8_t ev_buf[BUF_SIZE];
 extern __nv void * ev_src[];
@@ -83,8 +99,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
  */
 //#define EVENT() __attribute((annotate("event_begin")))
 #define EV_ST_SYM_NAME(name) _ev_state_ ## name
-#define EV_ST2_SYM_NAME(name) _ev_state_2 ## name
-
+#define EV_ST2_SYM_NAME(name) _ev_state_2 ## name 
 /*
  * We need the name and number here to handle the two different objects we're
  * keeping around
@@ -96,6 +111,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
         &EV_ST2_SYM_NAME(name)
 
 
+#ifdef LIBCOATIGCC_BUFFER_ALL
 #define EVENT(index,name) \
         void name(); \
         __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
@@ -107,6 +123,14 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
                                                   EV_ST_REF(name) \
                                                 };
 
+#else
+#define DEFERRED_EVENT(index,name) \
+        void name(); \
+        __nv task_t TASK_SYM_NAME(name) = { name, index, #name };
+
+
+#endif
+
 // Macro to handle first and second phase of commit
 #define EVENT_RETURN() \
         curctx->commit_state = EV_PH1;\
@@ -116,4 +140,4 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
         &CONTEXT_SYM_NAME(name)
 
 
-#endif
+#endif //_EVENT_H_

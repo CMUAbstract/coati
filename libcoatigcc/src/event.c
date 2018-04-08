@@ -15,34 +15,54 @@
 #define LCG_PRINTF printf
 #endif
 
-
 __nv uint8_t ev_buf[BUF_SIZE];
 __nv void * ev_src[NUM_DIRTY_ENTRIES];
 __nv void * ev_dst[NUM_DIRTY_ENTRIES];
 __nv size_t ev_size[NUM_DIRTY_ENTRIES];
+#ifdef LIBCOATIGCC_BUFFER_ALL
 __nv void * ev_read_list[NUM_DIRTY_ENTRIES];
 __nv void * ev_write_list[NUM_DIRTY_ENTRIES];
 
-__nv context_t * thread_ctx;
 __nv task_t * cur_tx_start;
 
-volatile uint16_t num_evbe = 0;
 volatile uint16_t num_evread = 0;
 volatile uint16_t num_evwrite = 0;
+#else 
+/*__nv the_event_ctx = {
+  .task = NULL,
+  .extra_state = &bh_state_0,
+  .extra_ev_state = &bh_state_ev_0,
+  .commit_state = EV_PH1
+};*/
+
+#endif // BUFFER_ALL
+
+__nv context_t * thread_ctx;
+volatile uint16_t num_evbe = 0;
 
 __nv ev_state state_ev_1 = {0};
 __nv ev_state state_ev_0 = {
     .num_devv = 0,
+#ifdef LIBCOATIGCC_BUFFER_ALL
     .num_read = 0,
     .num_write = 0,
+#endif // BUFFER_ALL
     .in_ev = 0,
-    .ev_need_commit = 0
+#ifdef LIBCOATIGCC_BUFFER_AL
+  .ev_need_commit = 0
+#else
+  .count = 0,
+  .committed = 0
+#endif // BUFFER_ALL
 };
 
 
 // For instrumentation
 __nv uint16_t _numEvents_uncommitted = 0;
 
+// Need to use totally different functions depending on whether we're buffering
+// or not
+#ifdef LIBCOATIGCC_BUFFER_ALL
 /*
  * @brief function to act as interrupt handler when an event interrupt is
  * triggered
@@ -93,6 +113,49 @@ void event_handler(context_t *new_event_ctx) {
           : [ntask] "r" (curctx->task->func)
           );
 }
+#else
+// Defined new function here
+/*
+ * @brief function that starts walking the queue of events
+ */
+void queued_event_handoff(void) {
+  _disable_events();
+  LCG_PRINTF("in event handler!\r\n");
+  context_t *next_ctx;
+  tx_state *new_tx_state;
+  ev_state *new_ev_state;
+  
+  next_ctx = (curctx == context_ptr0 ? context_ptr1 : context_ptr0);
+  
+  new_tx_state = (thread_ctx->extra_state == &state_0 ? &state_1 : &state_0);
+
+  new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                  &state_ev_0);
+ 
+  // Transfer in tx value
+  new_tx_state->in_tx = ((tx_state *)curctx->extra_state)->in_tx;
+  // Clear num_devv and set in_ev flag
+  new_ev_state->num_devv = 0;
+  new_ev_state->in_ev = 1;
+  next_ctx->extra_ev_state = new_ev_state;
+  next_ctx->commit_state = NO_COMMIT;
+  num_evbe = 0;
+  
+  LCG_PRINTF("In event handler! coming from %x \r\n",curctx->task->func);
+
+  // Point threads' context at current context
+  thread_ctx=curctx;
+  // Set curctx with prepackaged event_ctx
+  curctx = next_ctx;
+  __asm__ volatile ( // volatile because output operands unused by C
+        "mov #0x2400, r1\n"
+        "br %[ntask]\n"
+        :
+        : [ntask] "r" (curctx->task->func)
+        );
+
+}
+#endif // BUFFER_ALL
 
 /*
  * @brief returns the index into the tx buffers of where the data is located
@@ -144,7 +207,9 @@ void ev_commit_ph2() {
         );
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
+#ifdef LIBCOATIGCC_BUFFER_ALL
     ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = 0;
+#endif
 }
 
 void *event_memcpy(void *dest, void *src, uint16_t num) {

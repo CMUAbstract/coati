@@ -13,6 +13,7 @@
 #include "tx.h"
 #include "event.h"
 #include "types.h"
+#include "top_half.h"
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
@@ -139,6 +140,8 @@ void * read(const void *addr, unsigned size, acc_type acc) {
     uint16_t read_cnt;
     switch(acc) {
         case EVENT:
+            // Only add to read list if we're buffering all updates
+            #ifdef LIBCOATIGCC_BUFFER_ALL
             // add the address to the read list
             read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
             read_cnt += num_evread;
@@ -158,6 +161,8 @@ void * read(const void *addr, unsigned size, acc_type acc) {
               ev_read_list[read_cnt] = (void *) addr;
               num_evread++;
             }
+            #endif // BUFFER_ALL
+
             // first check buffer for value
             index = ev_find(addr);
             // Now pull the memory from somewhere
@@ -190,6 +195,8 @@ void * read(const void *addr, unsigned size, acc_type acc) {
         case TX:
             // Add to read filter for tx
             LCG_PRINTF("TX READ %x\r\n",addr);
+            // Don't record read/write lists unless we're monitoring everything
+            #ifdef LIBCOATIGCC_BUFFER_ALL
             read_cnt = ((tx_state *)curctx->extra_state)->num_read;
             //printf("RC, NUM_TXR: %u %u\r\n",read_cnt, num_txread);
             read_cnt += num_txread;
@@ -220,7 +227,8 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 tx_read_list[read_cnt] = (void *) addr;
                 num_txread++;
               }
-            #endif
+            #endif // CHECK_ALL_TX
+            #endif // BUFFER_ALL
             // check tsk buf
             index = tsk_find(addr);
             if(index > -1) {
@@ -228,7 +236,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 dst = (void *) tsk_dst[index];
             }
             else {
-                // Not in tsk buf, so check tx buf
+            #ifdef LIBCOATIGCC_BUFFER_ALL // Not in tsk buf, so check tx buf
                 LCG_PRINTF("Checking tx buf\r\n");
                 index = tx_find(addr);
                 if(index > -1) {
@@ -240,6 +248,10 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                     LCG_PRINTF("Back to main mem\r\n");
                     dst = (void *) addr;
                 }
+            #else
+                // Go straight back to main memory
+                dst = (void *) addr;
+            #endif
             }
             break;
         default:
@@ -311,6 +323,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
     switch(acc) {
         case EVENT:
             LCG_PRINTF("Running event write!\r\n");
+            #ifdef LIBCOATIGCC_BUFFER_ALL
             // add to write list
             write_cnt = ((ev_state *)curctx->extra_ev_state)->num_write;
             write_cnt += num_evwrite;
@@ -330,6 +343,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               ev_write_list[write_cnt] = (void *) addr;
               num_evwrite++;
             }
+            #endif //BUFFER_ALL
             // Check if addr is already in buffer
             index = ev_find(addr);
             if(index > -1) {
@@ -365,6 +379,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             }
             break;
         case TX:
+            #ifdef LIBCOATIGCC_BUFFER_ALL
             // Inc number of variables written
             write_cnt = ((tx_state *)curctx->extra_state)->num_write;
             write_cnt += num_txwrite;
@@ -396,6 +411,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                 num_txwrite++;
               }
             #endif // CHECK_ALL_TX
+            #endif // BUFFER_ALL
 
             // Intentional fall through
         case NORMAL:
@@ -475,10 +491,13 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
   // First copy over the old tx_state and ev_states
   *new_tx = *((tx_state *) curctx->extra_state);
   *new_ev = *((ev_state *) curctx->extra_ev_state);
+  #ifdef LIBCOATIGCC_BUFFER_ALL
   LCG_PRINTF("Sanity check1: %x %x, %x %x\r\n",new_tx->num_read,
                                 ((tx_state*)curctx->extra_state)->num_read,
                                 new_ev->num_read,
                                 ((tx_state*)curctx->extra_state)->num_read);
+  #endif // BUFFER_ALL
+
   switch(curctx->commit_state) {
     // We end up in the easy case if we finish a totally normal task
     case TSK_PH1:
@@ -491,14 +510,18 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       num_dtv = num_tbe;
       new_ev->in_ev = 0;
       new_tx->in_tx = 0;
+      #ifdef LIBCOATIGCC_BUFFER_ALL
       new_tx->num_read = ((tx_state *)curctx->extra_state)->num_read +
                           num_txread;
       new_tx->num_write = ((tx_state *)curctx->extra_state)->num_write +
                           num_txwrite;
       num_txwrite = 0;
       num_txread = 0;
+      #endif // BUFFER_ALL
       new_ctx->commit_state = TX_COMMIT;
       break;
+    
+    #ifdef LIBCOATIGCC_BUFFER_ALL
     case TSK_IN_TX_PH1:
       num_dtv = num_tbe;
       new_ev->in_ev = 0;
@@ -511,17 +534,20 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       new_tx->num_dtxv = ((tx_state *)curctx->extra_state)->num_dtxv;
       new_ctx->commit_state = TSK_IN_TX_COMMIT;
       break;
+      #endif // BUFFER_ALL
+
     case EV_PH1:
       num_dtv = num_tbe;
+
+      #ifdef LIBCOATIGCC_BUFFER_ALL
       new_ev->in_ev = 0;
       new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
                          num_evbe;
-      
+
       // Drop in transaction state from interrupted thread
       // Copy the ev contents though
       *new_tx = *((tx_state *)thread_ctx->extra_state);
       new_ctx->task = thread_ctx->task;
-
       if(((tx_state *)thread_ctx->extra_state)->in_tx == 0) {
         LCG_PRINTF("Only committing ev!\r\n");
         new_ctx->commit_state = EV_ONLY;
@@ -534,15 +560,40 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
                            num_evwrite;
         new_ctx->commit_state = EV_FUTURE;
       }
+      #else
+      new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
+                         num_evbe;
+      new_ctx->commit_state = EV_ONLY;
+      // We're done walking the events, get ready to go back to the normal
+      // thread.
+      if(((ev_state *)curctx->extra_ev_state)->count < 
+                            ((ev_state *)curctx->extra_ev_state)->committed + 1){
+        new_ev->in_ev = 0;
+        new_ctx->task = thread_ctx->task;
+        // Clear the number of committed events
+        new_ev->committed = 0;
+        new_ev->count = 0;
+      }
+      else {
+        // On to the next node!
+        new_ev->in_ev = 1;
+        new_ctx->task = (task_t *)event_queue.tasks[((ev_state*)
+                                          curctx->extra_ev_state)->committed + 1];
+        // Increment the number of events we've committed
+        new_ev->committed = ((ev_state*)curctx->extra_ev_state)->committed + 1;
+      }
+      #endif // BUFFER_ALL
       break;
     default:
       printf("Wrong type for ph1 commit! %u\r\n",curctx->commit_state);
       while(1);
     }
-  LCG_PRINTF("Sanity check2: %x %x, %x %x\r\n",new_tx->num_dtxv,
-                                ((tx_state*)curctx->extra_state)->num_dtxv,
-                                new_ev->num_read,
-                                ((tx_state*)curctx->extra_state)->num_read);
+    #ifdef LIBCOATIGCC_BUFFER_ALL
+    LCG_PRINTF("Sanity check2: %x %x, %x %x\r\n",new_tx->num_dtxv,
+                                  ((tx_state*)curctx->extra_state)->num_dtxv,
+                                  new_ev->num_read,
+                                  ((tx_state*)curctx->extra_state)->num_read);
+    #endif // BUFFER_ALL
 }
 
 /**
@@ -560,8 +611,19 @@ void commit_phase2() {
       switch(curctx->commit_state) {
         case TSK_COMMIT:
           tsk_commit_ph2();
+          #ifdef LIBCOATIGCC_BUFFER_ALL
           curctx->commit_state = NO_COMMIT;
+          #else
+          if(((tx_state *)curctx->extra_state)->in_tx == 0) {
+            num_dtv = 0;
+            num_tbe = 0;
+            if(((ev_state *)curctx->extra_ev_state)->count > 0) {
+              queued_event_handoff();
+            }
+          } 
+          #endif // BUFFER_ALL
           break;
+        #ifdef LIBCOATIGCC_BUFFER_ALL
         case TSK_IN_TX_COMMIT:
           tsk_in_tx_commit_ph2();
           LCG_PRINTF("dtxv = %u\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
@@ -571,31 +633,52 @@ void commit_phase2() {
           ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
           curctx->commit_state = NO_COMMIT;
           break;
+        #endif // BUFFER_ALL
         case TX_COMMIT:
+          #ifdef LIBCOATIGCC_BUFFER_ALL
           // Finish committing current tsk
           tsk_in_tx_commit_ph2();
           // Changes commit_state to any one of the following
           tx_commit_ph1_5();
+          #else
+          // Commit last task
+          tsk_commit_ph2();
+          // Add new function for running outstanding events here
+          // Clear all task buf entries before starting new task
+          if(((ev_state *)curctx->extra_ev_state)->count > 0) {
+            num_dtv = 0;
+            num_tbe = 0;
+            queued_event_handoff();
+          }
+          curctx->commit_state = NO_COMMIT;
+          #endif
           break;
         case TX_ONLY:
+          #ifdef LIBCOATIGCC_BUFFER_ALL
           ((tx_state *)curctx->extra_state)->num_read = 0;
           ((tx_state *)curctx->extra_state)->num_write = 0;
           ((ev_state *)curctx->extra_ev_state)->num_read = 0;
           ((ev_state *)curctx->extra_ev_state)->num_write = 0;
           ((ev_state *)curctx->extra_ev_state)->num_devv = 0;
           tx_commit_ph2();
+          #else
+          // Add new function for handling end of a tx
+          #endif
           curctx->commit_state = NO_COMMIT;
           break;
         case EV_ONLY:
+          #ifdef LIBCOATIGCC_BUFFER_ALL
           ((tx_state *)curctx->extra_state)->num_read = 0;
           ((tx_state *)curctx->extra_state)->num_write = 0;
           ((ev_state *)curctx->extra_ev_state)->num_read = 0;
           ((ev_state *)curctx->extra_ev_state)->num_write = 0;
+          #endif //BUFFER_ALL
           ev_commit_ph2();
           curctx->commit_state = NO_COMMIT;
           LCG_PRINTF("num_devv = %u\r\n",
                               ((ev_state *)curctx->extra_ev_state)->num_devv);
           break;
+        #ifdef LIBCOATIGCC_BUFFER_ALL
         case TX_EV_COMMIT:
           ((tx_state *)curctx->extra_state)->num_read = 0;
           ((tx_state *)curctx->extra_state)->num_write = 0;
@@ -614,6 +697,7 @@ void commit_phase2() {
           tx_commit_ph2();
           curctx->commit_state = NO_COMMIT;
           break;
+        #endif // BUFFER_ALL
         // Catch here if we didn't finish phase 1
         case TSK_PH1:
         case TX_PH1:
@@ -665,6 +749,9 @@ void transition_to(task_t *next_task)
     new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                     &state_ev_0);
   }
+  
+  // Set the next task here so we don't overwrite modifications from commit_phase1
+  next_ctx->task = next_task;
 
   // Performs first phase of the commit depending on what kind of task we're
   // in and sets up the next task n'at
@@ -673,11 +760,11 @@ void transition_to(task_t *next_task)
   // Now point the next context
   next_ctx->extra_state = new_tx_state;
   next_ctx->extra_ev_state = new_ev_state;
-  next_ctx->task = next_task;
 
   curctx = next_ctx;
-
-  LCG_PRINTF("Got %x num_dtxv\r\n",((tx_state *)curctx->extra_state)->num_dtxv); 
+  #ifdef LIBCOATIGCC_BUFFER_ALL
+  LCG_PRINTF("Got %x num_dtxv\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
+  #endif
   LCG_PRINTF("TT starting commit_ph1 = %u\r\n",curctx->commit_state);
 
   // Run the second phase of commit
@@ -728,6 +815,7 @@ int main() {
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
 
+    #ifdef LIBCOATIGCC_BUFFER_ALL
     // Check if we're in an event
     // TODO: task the fluff out of this so it's not so bulky. Most of
     // transition_to doesn't apply in this case
@@ -743,6 +831,9 @@ int main() {
       // Run second phase of commit
       commit_phase2();
     }
+    #else
+      commit_phase2();
+    #endif //BUFFER_ALL
     LCG_PRINTF("Done phase 2 commit\r\n");
     // enable events (or don't because we're in an atomic region) now that
     // commit_phase2 is done
@@ -756,8 +847,17 @@ int main() {
         _disable_events();
       }
     #else
+      #ifdef LIBCOATIGCC_BUFFER_ALL
       _enable_events();
-    #endif
+      #else
+        if(curctx->extra_ev_state->in_ev == 0){
+          _enable_events();
+        }
+        else {
+          _disable_events();
+        }
+      #endif // BUFFER_ALL
+    #endif // ATOMICS
 
     LCG_PRINTF("transitioning to %x %x \r\n",curctx->task->func,
     (TASK_REF(_entry_task))->func);
