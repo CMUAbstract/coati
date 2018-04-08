@@ -7,6 +7,7 @@
 #include "filter.h"
 #include "tx.h"
 #include "event.h"
+#include "top_half.h"
 #include <signal.h>
 
 #ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
@@ -127,7 +128,7 @@ void queued_event_handoff(void) {
   
   next_ctx = (curctx == context_ptr0 ? context_ptr1 : context_ptr0);
   
-  new_tx_state = (thread_ctx->extra_state == &state_0 ? &state_1 : &state_0);
+  new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
 
   new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                   &state_ev_0);
@@ -139,14 +140,18 @@ void queued_event_handoff(void) {
   new_ev_state->in_ev = 1;
   next_ctx->extra_ev_state = new_ev_state;
   next_ctx->commit_state = NO_COMMIT;
+  next_ctx->task = event_queue.tasks[1];
   num_evbe = 0;
   
-  LCG_PRINTF("In event handler! coming from %x \r\n",curctx->task->func);
-
+  printf("In event queue! coming from %x, going to %x \r\n",
+          curctx->task->func, next_ctx->task->func);
   // Point threads' context at current context
   thread_ctx=curctx;
   // Set curctx with prepackaged event_ctx
   curctx = next_ctx;
+  // Post check
+  printf("curctx func %x, thread_ctx func %x \r\n",
+          curctx->task->func, thread_ctx->task->func);
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
         "br %[ntask]\n"

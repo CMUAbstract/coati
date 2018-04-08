@@ -49,7 +49,9 @@ uint8_t top_half_start(void);
  * @brief a quick release exit if we're out of space in the buffer
  */
 #define TOP_HALF_START() \
-  if(top_half_start()) \
-    return
+  if(top_half_start()){\
+    LOG("RET EARLY\r\n");\
+    return;\
+  }
 
 #endif /// _TOP_HALF_H

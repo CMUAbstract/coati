@@ -20,6 +20,7 @@ __nv event_queue_t event_queue = {
  * needs to be the last darn thing that happens before RETI
  */
 uint8_t top_half_return (void *deferred_task) {
+  printf("Storing %x\r\n",((task_t *)deferred_task)->func);
   event_queue.tasks[((ev_state *)curctx->extra_ev_state)->count + 1] = deferred_task;
   // We can only perform this unprotected increment of count because no more
   // writes can possibly occur.
@@ -31,7 +32,9 @@ uint8_t top_half_return (void *deferred_task) {
  * @brief checks if there is still room in the event queue for more entries.
  */
 uint8_t top_half_start() {
+  printf("count = %u\r\n",((ev_state *)curctx->extra_ev_state)->count);
   if(((ev_state *)curctx->extra_ev_state)->count + 1 > NUM_WQ_ENTRIES) {
+    printf("Too many!\r\n");
     return 1;
   }
   return 0;

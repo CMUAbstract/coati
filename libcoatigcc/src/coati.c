@@ -1,3 +1,4 @@
+#include <msp430.h>
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
@@ -153,7 +154,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
               // that are possible.
               test = check_list(ev_read_list, read_cnt, addr);
               if(!test) {
-                LCG_PRINTF("Out of space in ev read list!\r\n");
+                printf("Out of space in ev read list!\r\n");
                 while(1);
               }
             }
@@ -305,6 +306,7 @@ void write_word(void *addr, uint16_t value) {
         }
         else {
             // Error! we ran out of space
+            printf("out of space in write word\r\n");
             while(1);
             return;
         }
@@ -566,8 +568,11 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       new_ctx->commit_state = EV_ONLY;
       // We're done walking the events, get ready to go back to the normal
       // thread.
-      if(((ev_state *)curctx->extra_ev_state)->count < 
+      LCG_PRINTF("count: %u, committed: %u\r\n",((ev_state*)curctx->extra_ev_state)->count,
+                                    ((ev_state*)curctx->extra_ev_state)->committed);
+      if(((ev_state *)curctx->extra_ev_state)->count <= 
                             ((ev_state *)curctx->extra_ev_state)->committed + 1){
+        LCG_PRINTF("Done! Heading back to %x\r\n", thread_ctx->task->func);
         new_ev->in_ev = 0;
         new_ctx->task = thread_ctx->task;
         // Clear the number of committed events
@@ -576,6 +581,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       }
       else {
         // On to the next node!
+        LCG_PRINTF("Next!\r\n");
         new_ev->in_ev = 1;
         new_ctx->task = (task_t *)event_queue.tasks[((ev_state*)
                                           curctx->extra_ev_state)->committed + 1];
@@ -608,6 +614,7 @@ void commit_phase2() {
                                                     curctx->commit_state,
                             ((ev_state *)curctx->extra_ev_state)->in_ev,
                             ((tx_state *)curctx->extra_state)->in_tx);
+      LCG_PRINTF("CP2 addr %x\r\n",curctx->task->func);
       switch(curctx->commit_state) {
         case TSK_COMMIT:
           tsk_commit_ph2();
@@ -615,12 +622,15 @@ void commit_phase2() {
           curctx->commit_state = NO_COMMIT;
           #else
           if(((tx_state *)curctx->extra_state)->in_tx == 0) {
+            LCG_PRINTF("Checking queue!\r\n");
             num_dtv = 0;
             num_tbe = 0;
             if(((ev_state *)curctx->extra_ev_state)->count > 0) {
+              printf("To the queue!\r\n");
               queued_event_handoff();
             }
           } 
+          curctx->commit_state = NO_COMMIT;
           #endif // BUFFER_ALL
           break;
         #ifdef LIBCOATIGCC_BUFFER_ALL
@@ -809,10 +819,10 @@ int main() {
     // we can selectively enable them later based on whether we're dealing with
     // an event or not
     _init();
-
     _numBoots++;
 
-    LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
+    printf("main commit state: %x\r\n",curctx->commit_state);
+    //LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
 
     #ifdef LIBCOATIGCC_BUFFER_ALL
@@ -832,7 +842,7 @@ int main() {
       commit_phase2();
     }
     #else
-      commit_phase2();
+    commit_phase2();
     #endif //BUFFER_ALL
     LCG_PRINTF("Done phase 2 commit\r\n");
     // enable events (or don't because we're in an atomic region) now that
@@ -851,7 +861,7 @@ int main() {
       _enable_events();
       #else
         if(curctx->extra_ev_state->in_ev == 0){
-          _enable_events();
+         // _enable_events();
         }
         else {
           _disable_events();

@@ -157,7 +157,7 @@ void tsk_in_tx_commit_ph2() {
       void *dst_alloc = tx_buf_alloc(tsk_src[num_dtv -1],
                                      tsk_size[num_dtv -1]);
       if(dst_alloc == NULL) {
-        LCG_PRINTF("Error allocating to tx buff\r\n");
+        printf("Error allocating to tx buff\r\n");
         while(1);
       }
         //LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
