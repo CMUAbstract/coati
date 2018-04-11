@@ -38,6 +38,11 @@ uint8_t top_half_start(void);
 #define TH_ARRAY_INNER(var, type, count, num) \
   __nv type _TH_PRIV_ ##var[num][count]
 
+#define BH_READ(var) \
+  _TH_PRIV_ ## var[((ev_state *)curctx->extra_ev_state)->committed + 1]
+
+#define BH_READ_ARR(var, index) \
+  _TH_PRIV_ ## var[((ev_state *)curctx->extra_ev_state)->committed +1][index]
 
 /*
  * @brief macro wrapper for returning from the top half of an event
@@ -50,7 +55,6 @@ uint8_t top_half_start(void);
  */
 #define TOP_HALF_START() \
   if(top_half_start()){\
-    LOG("RET EARLY\r\n");\
     return;\
   }
 

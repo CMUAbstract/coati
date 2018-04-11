@@ -36,14 +36,14 @@ extern volatile uint16_t num_evread;
 extern ev_state state_ev_1;
 extern ev_state state_ev_0;
 
-extern context_t *thread_ctx;
-
 #ifdef LIBCOATIGCC_BUFFER_ALL
+extern context_t *thread_ctx; 
 extern task_t * cur_tx_start;
 extern void * ev_read_list[];
 extern void * ev_write_list[];
 void event_handler();
 #else
+extern context_t thread_ctx; 
 extern void queued_event_handoff();
 #endif// BUFFER_ALL
 
@@ -134,7 +134,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 // Macro to handle first and second phase of commit
 #define EVENT_RETURN() \
         curctx->commit_state = EV_PH1;\
-        transition_to(thread_ctx->task)
+        transition_to(thread_ctx.task)
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)

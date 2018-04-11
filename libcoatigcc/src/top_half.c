@@ -34,7 +34,7 @@ uint8_t top_half_return (void *deferred_task) {
 uint8_t top_half_start() {
   //printf("count = %u\r\n",((ev_state *)curctx->extra_ev_state)->count);
   if(((ev_state *)curctx->extra_ev_state)->count + 1 > NUM_WQ_ENTRIES) {
-    printf("Too many!\r\n");
+    //printf("Too many!\r\n");
     return 1;
   }
   return 0;

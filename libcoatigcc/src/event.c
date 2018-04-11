@@ -28,7 +28,7 @@ __nv task_t * cur_tx_start;
 
 volatile uint16_t num_evread = 0;
 volatile uint16_t num_evwrite = 0;
-#else 
+#else
 /*__nv the_event_ctx = {
   .task = NULL,
   .extra_state = &bh_state_0,
@@ -38,7 +38,15 @@ volatile uint16_t num_evwrite = 0;
 
 #endif // BUFFER_ALL
 
+// Only needs to be a pointer when we're using full buffering because then we've
+// only got one event context at any given time so the context swap inside
+// events doesn't happen repeatedly and overwrite our return address.
+#ifdef LIBCOATIGCC_BUFFER_ALL
 __nv context_t * thread_ctx;
+#else
+__nv context_t  thread_ctx;
+#endif // BUFFER_ALL
+
 volatile uint16_t num_evbe = 0;
 
 __nv ev_state state_ev_1 = {0};
@@ -125,14 +133,14 @@ void queued_event_handoff(void) {
   context_t *next_ctx;
   tx_state *new_tx_state;
   ev_state *new_ev_state;
-  
+
   next_ctx = (curctx == context_ptr0 ? context_ptr1 : context_ptr0);
-  
+
   new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
 
   new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                   &state_ev_0);
- 
+
   // Transfer in tx value
   new_tx_state->in_tx = ((tx_state *)curctx->extra_state)->in_tx;
   // Clear num_devv and set in_ev flag
@@ -142,16 +150,19 @@ void queued_event_handoff(void) {
   next_ctx->commit_state = NO_COMMIT;
   next_ctx->task = event_queue.tasks[1];
   num_evbe = 0;
-  
-  printf("In event queue! coming from %x, going to %x \r\n",
+
+  LCG_PRINTF("In event queue! coming from %x, going to %x \r\n",
           curctx->task->func, next_ctx->task->func);
-  // Point threads' context at current context
-  thread_ctx=curctx;
+  // Copy contents of curctx to threadctx
+  thread_ctx.task = curctx->task;
+  // Double check that this actually works as expected, we probably need to set
+  // this commit state to NO_COMMIT on ret from deferred events anyway
+  thread_ctx.commit_state = curctx->commit_state;
   // Set curctx with prepackaged event_ctx
   curctx = next_ctx;
   // Post check
-  printf("curctx func %x, thread_ctx func %x \r\n",
-          curctx->task->func, thread_ctx->task->func);
+  LCG_PRINTF("curctx func %x, thread_ctx func %x \r\n",
+          curctx->task->func, thread_ctx.task->func);
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
         "br %[ntask]\n"

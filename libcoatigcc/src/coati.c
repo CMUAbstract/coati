@@ -572,22 +572,23 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
                                     ((ev_state*)curctx->extra_ev_state)->committed);
       if(((ev_state *)curctx->extra_ev_state)->count <= 
                             ((ev_state *)curctx->extra_ev_state)->committed + 1){
-        LCG_PRINTF("Done! Heading back to %x\r\n", thread_ctx->task->func);
+        LCG_PRINTF("Done! Heading back to %x\r\n", thread_ctx.task->func);
         new_ev->in_ev = 0;
-        new_ctx->task = thread_ctx->task;
+        new_ctx->task = thread_ctx.task;
         // Clear the number of committed events
         new_ev->committed = 0;
         new_ev->count = 0;
       }
       else {
         // On to the next node!
-        LCG_PRINTF("Next!\r\n");
+        LCG_PRINTF("Next! %x\r\n",thread_ctx.task->func);
         new_ev->in_ev = 1;
         new_ctx->task = (task_t *)event_queue.tasks[((ev_state*)
                                           curctx->extra_ev_state)->committed + 1];
         // Increment the number of events we've committed
         new_ev->committed = ((ev_state*)curctx->extra_ev_state)->committed + 1;
       }
+      new_ctx->commit_state = EV_ONLY;
       #endif // BUFFER_ALL
       break;
     default:
@@ -626,7 +627,7 @@ void commit_phase2() {
             num_dtv = 0;
             num_tbe = 0;
             if(((ev_state *)curctx->extra_ev_state)->count > 0) {
-              printf("To the queue!\r\n");
+              LCG_PRINTF("To the queue!\r\n");
               queued_event_handoff();
             }
           } 
@@ -744,6 +745,7 @@ void transition_to(task_t *next_task)
   context_t *next_ctx;
   tx_state *new_tx_state;
   ev_state *new_ev_state;
+  #ifdef LIBCOATIGCC_BUFFER_ALL
   // Point next context at the thread if we're returning from an ev
   if(((ev_state *)curctx->extra_ev_state)->in_ev) {
     LCG_PRINTF("Setting up thread!\r\n");
@@ -759,6 +761,13 @@ void transition_to(task_t *next_task)
     new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                     &state_ev_0);
   }
+  #else
+    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
+    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+
+    new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                    &state_ev_0);
+  #endif // BUFFER_ALL
   
   // Set the next task here so we don't overwrite modifications from commit_phase1
   next_ctx->task = next_task;
@@ -821,8 +830,7 @@ int main() {
     _init();
     _numBoots++;
 
-    printf("main commit state: %x\r\n",curctx->commit_state);
-    //LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
+    LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
 
     #ifdef LIBCOATIGCC_BUFFER_ALL
