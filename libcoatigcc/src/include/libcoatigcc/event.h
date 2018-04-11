@@ -129,12 +129,19 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
         __nv task_t TASK_SYM_NAME(name) = { name, index, #name };
 
 
-#endif
+#endif // BUFFER_ALL
 
 // Macro to handle first and second phase of commit
+#ifdef LIBCOATIGCC_BUFFER_ALL
+#define EVENT_RETURN() \
+        curctx->commit_state = EV_PH1;\
+        transition_to(thread_ctx->task)
+#else
+
 #define EVENT_RETURN() \
         curctx->commit_state = EV_PH1;\
         transition_to(thread_ctx.task)
+#endif // BUFFER_ALL
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)

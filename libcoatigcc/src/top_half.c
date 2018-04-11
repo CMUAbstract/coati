@@ -8,6 +8,7 @@
 #include "event.h"
 #include "types.h"
 
+#ifndef LIBCOATIGCC_BUFFER_ALL
 // Queue of event updates stored in a non-volatile buffer
 __nv event_queue_t event_queue;
 
@@ -40,3 +41,4 @@ uint8_t top_half_start() {
   return 0;
 }
 
+#endif // BUFFER_ALL

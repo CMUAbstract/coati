@@ -57,7 +57,7 @@ __nv ev_state state_ev_0 = {
     .num_write = 0,
 #endif // BUFFER_ALL
     .in_ev = 0,
-#ifdef LIBCOATIGCC_BUFFER_AL
+#ifdef LIBCOATIGCC_BUFFER_ALL
   .ev_need_commit = 0
 #else
   .count = 0,
