@@ -6,11 +6,11 @@ export LIBCOATIGCC_CONF_REPORT = 0
 include ../Makefile.config
 
 OBJECTS += \
+  top_half.o \
 	coati.o \
   tx.o \
   filter.o\
   event.o \
-  top_half.o \
 
 
 DEPS += \

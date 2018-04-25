@@ -10,11 +10,11 @@
 #include <stdio.h>
 #define LCG_PRINTF printf
 #endif
+#include "top_half.h"
 #include "coati.h"
 #include "tx.h"
 #include "event.h"
 #include "types.h"
-#include "top_half.h"
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};

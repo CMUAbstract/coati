@@ -77,9 +77,10 @@ __nv uint16_t _numEvents_uncommitted = 0;
  * triggered
  */
 void event_handler(context_t *new_event_ctx) {
-    // Disable all event interrupts
-    __enable_interrupt();
+    // Disable all event interrupts but enable global interrupts
+    // NEEDS TO BE DONE IN THAT ORDER!!!!!!!
     _disable_events();
+    __enable_interrupt();
     LCG_PRINTF("in event handler!\r\n");
     // Quick sanity check to make sure context hasn't been corrupted... if we're
     // here, it's DEFINITELY an event, so the in_ev bit had better be set.

@@ -3,7 +3,7 @@
 #include "event.h"
 #include "coati.h"
 
-#ifdef LIBCOATIGCC_BUFFER_ALL
+#ifndef LIBCOATIGCC_BUFFER_ALL
 
 #ifndef LIBCOATIGCC_NUM_WQ_ENTRIES
   #pragma message "NUM_WQ_ENTRIES UNDEF"
@@ -60,6 +60,8 @@ uint8_t top_half_start(void);
     return;\
   }
 
+#define TOP_HALF_CHECK_START() \
+  top_half_start()
 #endif // BUFFER_ALL
 
 #endif /// _TOP_HALF_H
