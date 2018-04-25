@@ -111,7 +111,28 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
         &EV_ST2_SYM_NAME(name)
 
 
-#ifdef LIBCOATIGCC_BUFFER_ALL
+#ifndef LIBCOATIGCC_BUFFER_ALL
+#define DEFERRED_EVENT(index,name) \
+        void name(); \
+        __nv task_t TASK_SYM_NAME(name) = { name, index, #name };
+
+
+#else
+#ifdef LIBCOATIGCC_ATOMICS
+// We need a special case for ATOMICS because we add the atomic bit to the
+// task b/c we need to be able to disable events during an entire task
+#define EVENT(index,name) \
+        void name(); \
+        __nv task_t TASK_SYM_NAME(name) = { name, index, 1, #name }; \
+        __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0,0,0,0}; \
+        __nv ev_state EV_ST_SYM_NAME(name) = {0,0,0,1,0};\
+        __nv ev_state EV_ST2_SYM_NAME(name) = {0,0,0,1,0};\
+        __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
+                                                  TX_ST_REF(name), \
+                                                  EV_ST_REF(name) \
+                                                };
+
+#else
 #define EVENT(index,name) \
         void name(); \
         __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
@@ -122,13 +143,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
                                                   TX_ST_REF(name), \
                                                   EV_ST_REF(name) \
                                                 };
-
-#else
-#define DEFERRED_EVENT(index,name) \
-        void name(); \
-        __nv task_t TASK_SYM_NAME(name) = { name, index, #name };
-
-
+#endif // ATOMICS
 #endif // BUFFER_ALL
 
 // Macro to handle first and second phase of commit
