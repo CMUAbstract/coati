@@ -798,7 +798,7 @@ void transition_to(task_t *next_task)
   // a check that we're in an event.
   // enable events (or don't because we're in an atomic region) now that
   // commit_phase2 is done
-  #ifdef LIBCOATIGCC_ATOMICS
+    #if defined(LIBCOATIGCC_ATOMICS) && defined(LIBCOATIGCC_ATOMICS_HW)
     if(curctx->task->atomic == 0) {
       LCG_PRINTF("not atomic\r\n");
       _enable_events();
@@ -855,7 +855,7 @@ int main() {
     LCG_PRINTF("Done phase 2 commit\r\n");
     // enable events (or don't because we're in an atomic region) now that
     // commit_phase2 is done
-    #ifdef LIBCOATIGCC_ATOMICS
+    #if defined(LIBCOATIGCC_ATOMICS) && defined(LIBCOATIGCC_ATOMICS_HW)
       if(curctx->task->atomic == 0) {
         LCG_PRINTF("not atomic\r\n");
         _enable_events();
@@ -869,7 +869,7 @@ int main() {
       _enable_events();
       #else
         if(curctx->extra_ev_state->in_ev == 0){
-         // _enable_events();
+          _enable_events();
         }
         else {
           _disable_events();
