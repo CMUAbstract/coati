@@ -77,51 +77,53 @@ __nv uint16_t _numEvents_uncommitted = 0;
  * triggered
  */
 void event_handler(context_t *new_event_ctx) {
-    // Disable all event interrupts but enable global interrupts
-    // NEEDS TO BE DONE IN THAT ORDER!!!!!!!
-    _disable_events();
-    __enable_interrupt();
-    LCG_PRINTF("in event handler!\r\n");
-    // Quick sanity check to make sure context hasn't been corrupted... if we're
-    // here, it's DEFINITELY an event, so the in_ev bit had better be set.
-    if(((ev_state *)new_event_ctx->extra_ev_state)->in_ev == 0){
-      printf("Error! event context corrupted, in_ev = 0\r\n");
-      while(1);
-    }
+  TIMER_START
+  // Disable all event interrupts but enable global interrupts
+  // NEEDS TO BE DONE IN THAT ORDER!!!!!!!
+  _disable_events();
+  __enable_interrupt();
+  LCG_PRINTF("in event handler!\r\n");
+  // Quick sanity check to make sure context hasn't been corrupted... if we're
+  // here, it's DEFINITELY an event, so the in_ev bit had better be set.
+  if(((ev_state *)new_event_ctx->extra_ev_state)->in_ev == 0){
+    printf("Error! event context corrupted, in_ev = 0\r\n");
+    while(1);
+  }
 
-    // Clear commit flag for this context
-    // TODO add in some error checking
-    ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = 0;
-    ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
-                                ((ev_state *)curctx->extra_ev_state)->num_devv;
-    // Clear event buffer counters but don't turn on curctx->in_ev! If we died
-    // after seeting that, events would continously be disabled and they'd never
-    // get turned back on
-    num_evbe = 0;
-    num_evread = 0;
-    num_evwrite = 0;
+  // Clear commit flag for this context
+  // TODO add in some error checking
+  ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = 0;
+  ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
+                              ((ev_state *)curctx->extra_ev_state)->num_devv;
+  // Clear event buffer counters but don't turn on curctx->in_ev! If we died
+  // after seeting that, events would continously be disabled and they'd never
+  // get turned back on
+  num_evbe = 0;
+  num_evread = 0;
+  num_evwrite = 0;
 
-    // Pass across the number of variables in the ev buffer from the threadctx
-    // to the active eventctx so that the next event can access the old
-    // variables (it's fine to leave this unprotected from a power standpoint,
-    // it'll just get rewritten if we power down
-    ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
-        ((ev_state *)curctx->extra_ev_state)->num_devv;
-    LCG_PRINTF("In event handler! coming from %x \r\n",curctx->task->func);
+  // Pass across the number of variables in the ev buffer from the threadctx
+  // to the active eventctx so that the next event can access the old
+  // variables (it's fine to leave this unprotected from a power standpoint,
+  // it'll just get rewritten if we power down
+  ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
+      ((ev_state *)curctx->extra_ev_state)->num_devv;
+  LCG_PRINTF("In event handler! coming from %x \r\n",curctx->task->func);
 
-    // Point threads' context at current context
-    thread_ctx=curctx;
-    LCG_PRINTF("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
-    ((tx_state *)thread_ctx->extra_state)->in_tx);
-    //printf("SR:%x\r\n",READ_SP);
-    // Set curctx with prepackaged event_ctx
-    curctx = new_event_ctx;
-    __asm__ volatile ( // volatile because output operands unused by C
-          "mov #0x2400, r1\n"
-          "br %[ntask]\n"
-          :
-          : [ntask] "r" (curctx->task->func)
-          );
+  // Point threads' context at current context
+  thread_ctx=curctx;
+  LCG_PRINTF("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
+  ((tx_state *)thread_ctx->extra_state)->in_tx);
+  //printf("SR:%x\r\n",READ_SP);
+  // Set curctx with prepackaged event_ctx
+  curctx = new_event_ctx;
+  TIMER_PAUSE
+  __asm__ volatile ( // volatile because output operands unused by C
+        "mov #0x2400, r1\n"
+        "br %[ntask]\n"
+        :
+        : [ntask] "r" (curctx->task->func)
+        );
 }
 #else
 // Defined new function here
@@ -164,6 +166,9 @@ void queued_event_handoff(void) {
   // Post check
   LCG_PRINTF("curctx func %x, thread_ctx func %x \r\n",
           curctx->task->func, thread_ctx.task->func);
+  // No timer start in this function because we are always calling this function
+  // from a function that has a TIMER_START call
+  TIMER_PAUSE
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
         "br %[ntask]\n"

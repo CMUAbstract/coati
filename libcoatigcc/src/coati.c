@@ -16,6 +16,11 @@
 #include "event.h"
 #include "types.h"
 
+// For instrumentation
+__nv unsigned overflows = 0;
+__nv unsigned overflows1 = 0;
+
+
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
 __nv context_t context_0 = {
@@ -136,6 +141,7 @@ void * tsk_buf_alloc(void * addr, size_t size) {
  * provided or the value in main memory
  */
 void * read(const void *addr, unsigned size, acc_type acc) {
+    TIMER1_START
     int index;
     void * dst;
     uint16_t read_cnt;
@@ -261,6 +267,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             while(1);
     }
     LCG_PRINTF("Reading from %x \r\n",dst);
+    TIMER1_PAUSE
     return dst;
 }
 
@@ -811,7 +818,7 @@ void transition_to(task_t *next_task)
     _enable_events();
   #endif
   //}
-
+  TIMER_PAUSE
   __asm__ volatile ( // volatile because output operands unused by C
       "mov #0x2400, r1\n"
       "br %[ntask]\n"
@@ -821,7 +828,8 @@ void transition_to(task_t *next_task)
 
 }
 
-
+// Note, we're not adding timer instrumentation to main because the timers are
+// only being used on continuous power
 /** @brief Entry point upon reboot */
 int main() {
     // Init needs to set up all the hardware, but leave interrupts disabled so

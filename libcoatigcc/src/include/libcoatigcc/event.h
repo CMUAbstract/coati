@@ -80,8 +80,12 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 #define EV_READ(x,type) \
     *((type *)read(&(x),sizeof(type),EVENT))
 
+
+#if 0
+
 #define EV_WRITE(x,val,type,is_ptr) \
-    { if(is_ptr){ \
+    { TIMER1_START \
+      if(is_ptr){ \
           write(&(x),sizeof(type),EVENT,val);\
       }\
       else { \
@@ -89,6 +93,16 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
           write(&(x),sizeof(type),EVENT,_temp_loc);\
       } \
     }
+#endif
+
+#if 1
+#define EV_WRITE(x,val,type,is_ptr) \
+    { TIMER1_START \
+          type _temp_loc = val;\
+          write(&(x),sizeof(type),EVENT,_temp_loc);\
+      TIMER1_PAUSE \
+    }
+#endif
 
 /*
  * @brief handles all the nasty interrupt declaration stuff for events, the
