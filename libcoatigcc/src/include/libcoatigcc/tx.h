@@ -28,12 +28,10 @@ typedef struct _tx_state {
 #ifdef LIBCOATIGCC_BUFFER_ALL
 // Normal transition_to macro given a different name for programming sanity
 #define TX_TRANSITION_TO(task) \
-    TIMER_START \
     curctx->commit_state = TSK_IN_TX_PH1; \
     transition_to(TASK_REF(task))
 #else
 #define TX_TRANSITION_TO(task) \
-    TIMER_START \
     curctx->commit_state = TSK_PH1; \
     transition_to(TASK_REF(task))
 #endif // BUFFER_ALL
@@ -41,7 +39,6 @@ typedef struct _tx_state {
 // transition macro for end of a transaction so we don't have TX_END's hanging
 // around
 #define TX_END_TRANSITION_TO(task) \
-    TIMER_START \
     curctx->commit_state = TX_PH1; \
     transition_to(TASK_REF(task))
 
@@ -65,27 +62,12 @@ typedef struct _tx_state {
     *((type *)read(&(x),sizeof(type),TX))
 
 
-#if 0
-#define TX_WRITE(x,val,type,is_ptr) \
-    TIMER1_START \
-    { if(is_ptr){ \
-          write(&(x),sizeof(type),TX,val);\
-      }\
-      else { \
-          type _temp_loc = val;\
-          write(&(x),sizeof(type),TX,_temp_loc);\
-      } \
-    } \
-    TIMER1_PAUSE
-
-#else
 #define TX_WRITE(x, val,type,is_ptr) \
-    TIMER1_START \
+    RW_TIMER_START \
     { type _temp_loc = val;\
       write(&(x),sizeof(type),TX,_temp_loc);\
     }\
-    TIMER1_PAUSE
-#endif
+    RW_TIMER_STOP
 
 extern tx_state state_1;
 extern tx_state state_0;

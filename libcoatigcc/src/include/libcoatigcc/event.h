@@ -81,28 +81,13 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
     *((type *)read(&(x),sizeof(type),EVENT))
 
 
-#if 0
 
 #define EV_WRITE(x,val,type,is_ptr) \
-    { TIMER1_START \
-      if(is_ptr){ \
-          write(&(x),sizeof(type),EVENT,val);\
-      }\
-      else { \
+    { RW_TIMER_START \
           type _temp_loc = val;\
           write(&(x),sizeof(type),EVENT,_temp_loc);\
-      } \
+      RW_TIMER_STOP \
     }
-#endif
-
-#if 1
-#define EV_WRITE(x,val,type,is_ptr) \
-    { TIMER1_START \
-          type _temp_loc = val;\
-          write(&(x),sizeof(type),EVENT,_temp_loc);\
-      TIMER1_PAUSE \
-    }
-#endif
 
 /*
  * @brief handles all the nasty interrupt declaration stuff for events, the
@@ -163,11 +148,13 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 // Macro to handle first and second phase of commit
 #ifdef LIBCOATIGCC_BUFFER_ALL
 #define EVENT_RETURN() \
+        TRANS_TIMER_START \
         curctx->commit_state = EV_PH1;\
         transition_to(thread_ctx->task)
 #else
 
 #define EVENT_RETURN() \
+        TRANS_TIMER_START \
         curctx->commit_state = EV_PH1;\
         transition_to(thread_ctx.task)
 #endif // BUFFER_ALL

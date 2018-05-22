@@ -19,7 +19,13 @@
 // For instrumentation
 __nv unsigned overflows = 0;
 __nv unsigned overflows1 = 0;
+unsigned transition_ticks = 0;
+unsigned rw_ticks = 0;
 
+unsigned rw_starts = 0;
+unsigned rw_stops= 0;
+unsigned trans_starts= 0;
+unsigned trans_stops= 0;
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
@@ -141,7 +147,7 @@ void * tsk_buf_alloc(void * addr, size_t size) {
  * provided or the value in main memory
  */
 void * read(const void *addr, unsigned size, acc_type acc) {
-    TIMER1_START
+
     int index;
     void * dst;
     uint16_t read_cnt;
@@ -267,59 +273,9 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             while(1);
     }
     LCG_PRINTF("Reading from %x \r\n",dst);
-    TIMER1_PAUSE
     return dst;
 }
 
-
-/*
- * @brief writes the value word to address' location in task buf,
- * returns 0 if successful, -1 if allocation failed
- */
-void write_byte(void *addr, uint8_t value) {
-    int index;
-    index = tsk_find(addr);
-    if(index > -1) {
-        *((uint8_t *)(tsk_dst + index)) = value;
-    }
-    else {
-        void * dst = tsk_buf_alloc(addr, 1);
-        if(dst) {
-            *((uint8_t *) dst) = value;
-        }
-        else {
-            // Error! we ran out of space
-            while(1);
-            return;
-        }
-    }
-    return;
-}
-
-/*
- * @brief writes the value word to address' location in task buf,
- * returns 0 if successful, -1 if allocation failed
- */
-void write_word(void *addr, uint16_t value) {
-    int index;
-    index = tsk_find(addr);
-    if(index > -1) {
-        *((uint16_t *)(tsk_dst + index)) = value;
-    }
-    else {
-        void * dst = tsk_buf_alloc(addr, 2);
-        if(dst) {
-            *((uint16_t *) dst) = value;
-        }
-        else {
-            // Error! we ran out of space
-            printf("out of space in write word\r\n");
-            while(1);
-            return;
-        }
-    }
-    return;
-}
 
 /*
  * @brief writes data from value pointer to address' location in task buf,
@@ -466,28 +422,6 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             while(1);
     }
     return;
-}
-
-void *internal_memcpy(void *dest, void *src, uint16_t num) {
-  if ((uintptr_t) dest % sizeof(unsigned) == 0 &&
-      (uintptr_t) dest % sizeof(unsigned) == 0) {
-    unsigned *d = dest;
-    unsigned tmp;
-    const unsigned *s = src;
-    for (unsigned i = 0; i < num/sizeof(unsigned); i++) {
-      tmp = *((unsigned *) read(&s[i], sizeof(unsigned), NORMAL));
-      write(&d[i], sizeof(unsigned), NORMAL, tmp);
-    }
-  } else {
-    char *d = dest;
-    const char *s = src;
-    char tmp;
-    for (unsigned i = 0; i < num; i++) {
-      tmp = *((char *) read(&s[i], sizeof(char), NORMAL));
-      write(&d[i], sizeof(char), NORMAL, tmp);
-    }
-  }
-  return dest;
 }
 
 /*
@@ -743,8 +677,9 @@ void commit_phase2() {
  */
 void transition_to(task_t *next_task)
 {
- // disable event interrupts so we don't have to deal with them during
- // transition
+  TRANS_TIMER_START
+  // disable event interrupts so we don't have to deal with them during
+  // transition
   _disable_events();
   LCG_PRINTF("TT commit state = %u, in tx = %u, addr %x\r\n",curctx->commit_state,
   ((tx_state *)curctx->extra_state)->in_tx, curctx->task->func);
@@ -818,7 +753,7 @@ void transition_to(task_t *next_task)
     _enable_events();
   #endif
   //}
-  TIMER_PAUSE
+  TRANS_TIMER_STOP
   __asm__ volatile ( // volatile because output operands unused by C
       "mov #0x2400, r1\n"
       "br %[ntask]\n"
@@ -837,7 +772,7 @@ int main() {
     // an event or not
     _init();
     _numBoots++;
-
+    TRANS_TIMER_START
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
 
@@ -887,7 +822,7 @@ int main() {
 
     LCG_PRINTF("transitioning to %x %x \r\n",curctx->task->func,
     (TASK_REF(_entry_task))->func);
-
+    TRANS_TIMER_STOP
     __asm__ volatile ( // volatile because output operands unused by C
         "br %[nt]\n"
         : /* no outputs */
@@ -896,3 +831,18 @@ int main() {
 
     return 0; // TODO: write our own entry point and get rid of this
 }
+
+#ifdef LIBCOATIGCC_TEST_TIMING
+void add_ticks(unsigned *overflow, unsigned *ticks, unsigned new_ticks) {
+  if(new_ticks > (0xFFFF - *ticks)) {
+    (*overflow)++;
+    *ticks = new_ticks - (0xFFFF - *ticks);
+  }
+  else {
+    *ticks += new_ticks;
+  }
+  return;
+}
+#endif
+
+

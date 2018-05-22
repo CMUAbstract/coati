@@ -77,7 +77,7 @@ __nv uint16_t _numEvents_uncommitted = 0;
  * triggered
  */
 void event_handler(context_t *new_event_ctx) {
-  TIMER_START
+  TRANS_TIMER_START
   // Disable all event interrupts but enable global interrupts
   // NEEDS TO BE DONE IN THAT ORDER!!!!!!!
   _disable_events();
@@ -117,7 +117,7 @@ void event_handler(context_t *new_event_ctx) {
   //printf("SR:%x\r\n",READ_SP);
   // Set curctx with prepackaged event_ctx
   curctx = new_event_ctx;
-  TIMER_PAUSE
+  TRANS_TIMER_STOP
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
         "br %[ntask]\n"
@@ -168,7 +168,7 @@ void queued_event_handoff(void) {
           curctx->task->func, thread_ctx.task->func);
   // No timer start in this function because we are always calling this function
   // from a function that has a TIMER_START call
-  TIMER_PAUSE
+  TRANS_TIMER_STOP
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
         "br %[ntask]\n"
@@ -234,27 +234,6 @@ void ev_commit_ph2() {
 #endif
 }
 
-void *event_memcpy(void *dest, void *src, uint16_t num) {
-  if ((uintptr_t) dest % sizeof(unsigned) == 0 &&
-      (uintptr_t) dest % sizeof(unsigned) == 0) {
-    unsigned *d = dest;
-    unsigned tmp;
-    const unsigned *s = src;
-    for (unsigned i = 0; i < num/sizeof(unsigned); i++) {
-      tmp = *((unsigned *) read(&s[i], sizeof(unsigned), EVENT));
-      write(&d[i], sizeof(unsigned), EVENT, tmp);
-    }
-  } else {
-    char *d = dest;
-    const char *s = src;
-    char tmp;
-    for (unsigned i = 0; i < num; i++) {
-      tmp = *((char *) read(&s[i], sizeof(char), EVENT));
-      write(&d[i], sizeof(char), EVENT, tmp);
-    }
-  }
-  return dest;
-}
 
 
 

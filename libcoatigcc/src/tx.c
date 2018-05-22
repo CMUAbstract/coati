@@ -295,27 +295,5 @@ void tx_commit_ph1_5() {
   return;
 }
 
-
-void *tx_memcpy(void *dest, void *src, uint16_t num) {
-  if ((uintptr_t) dest % sizeof(unsigned) == 0 &&
-      (uintptr_t) dest % sizeof(unsigned) == 0) {
-    unsigned *d = dest;
-    unsigned tmp;
-    const unsigned *s = src;
-    for (unsigned i = 0; i < num/sizeof(unsigned); i++) {
-      tmp = *((unsigned *) read(&s[i], sizeof(unsigned), TX));
-      write(&d[i], sizeof(unsigned), TX, tmp);
-    }
-  } else {
-    char *d = dest;
-    const char *s = src;
-    char tmp;
-    for (unsigned i = 0; i < num; i++) {
-      tmp = *((char *) read(&s[i], sizeof(char), TX));
-      write(&d[i], sizeof(char), TX, tmp);
-    }
-  }
-  return dest;
-}
 #endif // BUFFER_ALL
 

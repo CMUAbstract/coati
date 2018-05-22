@@ -49,7 +49,12 @@ typedef enum {
 
 extern unsigned overflows;
 extern unsigned overflows1;
-
+extern unsigned transition_ticks;
+extern unsigned rw_ticks;
+extern unsigned rw_starts;
+extern unsigned rw_stops;
+extern unsigned trans_starts;
+extern unsigned trans_stops;
 
 extern void *tsk_src[];
 extern void *tsk_dst[];
@@ -86,7 +91,7 @@ typedef struct _context_t {
 } context_t;
 
 extern context_t * volatile curctx;
-extern context_t * volatile context_ptr0; 
+extern context_t * volatile context_ptr0;
 extern context_t * volatile context_ptr1;
 
 /** @brief Internal macro for constructing name of task symbol */
@@ -195,66 +200,71 @@ void commit_phase1();
 void transition_to(task_t *task);
 
 #ifdef LIBCOATIGCC_TEST_TIMING
-//--------------TIMER A0 initialization stuff----------------
+//--------------TIMER I0 initialization stuff----------------
+void add_ticks(unsigned *, unsigned *, unsigned);
+
 // Initiatilize timer with ACLK as clock source, in continuous mode with a
 // prescalar of 8.
 #define TIMER_INIT \
-  TA0CTL = TASSEL__ACLK | MC__STOP | ID_1 | TACLR | TAIE;
+  /*TA0CTL = TASSEL__ACLK | MC__STOP | ID_0 | TACLR | TAIE;*/ \
+  TA0CTL = TASSEL__SMCLK | MC__STOP | ID_3 | TACLR | TAIE;
 
 // Restart the timer by setting conintuous mode, we can only get away with doing
 // it this way because pausing sets the MC bits to 0, otherwise we'd need to
 // clear and then overwrite :) 
-#define TIMER_START \
-  /*printf("S T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+#define TRANS_TIMER_START \
+  __delay_cycles(4000); \
+  trans_starts++; \
+  /*printf("T %u\r\n",TA0R);*/ \
   TA0CTL |= MC__CONTINUOUS;
 
 // Pause the timer by setting the MC bits to 0
 #define MODE_SHIFT 4
-#define TIMER_PAUSE \
+#define TRANS_TIMER_STOP \
   /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
   TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  add_ticks(&overflows, &transition_ticks, TA0R);\
+  /*printf("F T:%u %u\r\n",overflows,transition_ticks);*/\
+  TA0CTL |= TACLR; \
+  TA0R = 0; \
+  trans_stops++;
 
-//-------------TIMER A1 initialization stuff--------------
-// Initiatilize timer with ACLK as clock source, in continuous mode with a
-// prescalar of 8.
-#define TIMER1_INIT \
-  TA1CTL = TASSEL__ACLK | MC__STOP | ID_1 | TACLR | TAIE;
-
-// Restart the timer by setting conintuous mode, we can only get away with doing
-// it this way because pausing sets the MC bits to 0, otherwise we'd need to
-// clear and then overwrite :) 
-#define TIMER1_START \
-  /*printf("S T1: %u + %u / 65536\r\n",overflows1, TA1R); \*/ \
-  TA1CTL |= MC__CONTINUOUS;
+#define RW_TIMER_START \
+  /*printf("R %u\r\n",TA0R); */\
+  __delay_cycles(4000); \
+  rw_starts++; \
+  TA0CTL |= MC__CONTINUOUS;
 
 // Pause the timer by setting the MC bits to 0
 #define MODE_SHIFT 4
-#define TIMER1_PAUSE \
-  /*printf("P T1: %u + %u / 65536\r\n",overflows1, TA1R);*/ \
-  TA1CTL &= ~(0x3 << MODE_SHIFT); \
+#define RW_TIMER_STOP \
+  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+  TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  add_ticks(&overflows1, &rw_ticks, TA0R);\
+  /*printf("F R:%u %u\r\n",overflows1,rw_ticks);*/\
+  TA0CTL |= TACLR; \
+  TA0R = 0;\
+  rw_stops++;
 
 #else // timer
 
 #define TIMER_INIT \
   ;
-#define TIMER_START \
+#define TRANS_TIMER_START \
   ;
-#define TIMER_PAUSE \
+#define TRANS_TIMER_STOP \
+  ;
+#define RW_TIMER_START \
+  ;
+#define RW_TIMER_STOP \
   ;
 
-#define TIMER1_INIT \
-  ;
-#define TIMER1_START \
-  ;
-#define TIMER1_PAUSE \
-  ;
 
 #endif
 /** @brief Transfer control to the given task
  *  @param task     Name of the task function
  *  */
 #define TRANSITION_TO(task) \
-    TIMER_START \
     curctx->commit_state = TSK_PH1;\
     transition_to(TASK_REF(task))
 
@@ -274,10 +284,10 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
  * @brief writes a value to x based on the size of the variable
  */
 #define WRITE(x,val,type,is_ptr) \
-    { TIMER1_START \
+    { RW_TIMER_START \
       type _temp_loc = val;\
       write(&(x),sizeof(type),NORMAL,_temp_loc);\
-      TIMER1_PAUSE \
+      RW_TIMER_STOP \
     }
 
 #endif // COATI_H
