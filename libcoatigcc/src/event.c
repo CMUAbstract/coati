@@ -187,6 +187,9 @@ int16_t  ev_find(const void * addr) {
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
+      #ifdef LIBCOATIGCC_TEST_COUNT
+        access_len++;
+      #endif
           //LCG_PRINTF("Checking %x \r\n",ev_dirty_src[i]);
           if(addr == ev_src[i])
               return i;

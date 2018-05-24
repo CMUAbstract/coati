@@ -16,6 +16,7 @@
 #include "event.h"
 #include "types.h"
 
+#ifdef LIBCOATIGCC_TEST_TIMING
 // For instrumentation
 __nv unsigned overflows = 0;
 __nv unsigned overflows1 = 0;
@@ -26,6 +27,18 @@ unsigned rw_starts = 0;
 unsigned rw_stops= 0;
 unsigned trans_starts= 0;
 unsigned trans_stops= 0;
+#endif
+
+#ifdef LIBCOATIGCC_TEST_COUNT
+unsigned r_tsk_counts = 0;
+unsigned r_tx_counts = 0;
+unsigned r_ev_counts = 0;
+unsigned w_tsk_counts = 0;
+unsigned w_tx_counts = 0;
+unsigned w_ev_counts = 0;
+unsigned access_len = 0;
+__nv unsigned total_access_count = 0;
+#endif
 
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
@@ -91,6 +104,9 @@ void tsk_commit_ph2() {
 int16_t  tsk_find(const void * addr) {
   if(num_tbe) {
     for(int i = 0; i < num_tbe; i++) {
+      #ifdef LIBCOATIGCC_TEST_COUNT
+      access_len++;
+      #endif
       if(addr == tsk_src[i])
         return i;
     }
@@ -136,7 +152,7 @@ void * tsk_buf_alloc(void * addr, size_t size) {
         tsk_dst[num_tbe - 1] = (void *) new_ptr;
         tsk_size[num_tbe - 1] = size;
     }
-    LCG_PRINTF("ptr check: %x %x, buf = %x\r\n",tsk_dst[num_tbe - 1], new_ptr,tsk_buf); 
+    LCG_PRINTF("ptr check: %x %x, buf = %x\r\n",tsk_dst[num_tbe - 1], new_ptr,tsk_buf);
     LCG_PRINTF("Writing to %x, from = %x, num_tbe = %x \r\n", new_ptr,
         tsk_src[num_tbe -1], num_tbe);
     return (void *) new_ptr;
@@ -147,7 +163,19 @@ void * tsk_buf_alloc(void * addr, size_t size) {
  * provided or the value in main memory
  */
 void * read(const void *addr, unsigned size, acc_type acc) {
-
+    #ifdef LIBCOATIGCC_TEST_COUNT
+      access_len = 0;
+      total_access_count++;
+      if (((ev_state *)curctx->extra_ev_state)->in_ev) {
+        r_ev_counts++;
+      }
+      else if(((tx_state *)curctx->extra_state)->in_tx) {
+        r_tx_counts++;
+      }
+      else {
+        r_tsk_counts++;
+      }
+    #endif
     int index;
     void * dst;
     uint16_t read_cnt;
@@ -183,10 +211,6 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             if(index > -1) {
                dst = (void *) ev_dst[index];
               LCG_PRINTF("rd: index = %u, Found, Buffer vals: ", index);
-              for(int16_t i = 0; i < 8; i++) {
-                LCG_PRINTF("%x: ", ev_buf[i]);
-              }
-              LCG_PRINTF("\r\n");
             }
             // Return main memory addr
             else {
@@ -273,6 +297,12 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             while(1);
     }
     LCG_PRINTF("Reading from %x \r\n",dst);
+    #ifdef LIBCOATIGCC_TEST_COUNT
+    if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
+      printf("\r\n");
+    }
+    printf("%u,", access_len);
+    #endif // TEST_COUNT
     return dst;
 }
 
@@ -282,6 +312,19 @@ void * read(const void *addr, unsigned size, acc_type acc) {
  * returns 0 if successful, -1 if allocation failed
  */
 void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
+    #ifdef LIBCOATIGCC_TEST_COUNT
+      access_len = 0;
+      total_access_count++;
+      if (((ev_state *)curctx->extra_ev_state)->in_ev) {
+        w_ev_counts++;
+      }
+      else if(((tx_state *)curctx->extra_state)->in_tx) {
+        w_tx_counts++;
+      }
+      else {
+        w_tsk_counts++;
+      }
+    #endif
     int index;
     uint16_t write_cnt;
     //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
@@ -421,6 +464,12 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             // Error!
             while(1);
     }
+    #ifdef LIBCOATIGCC_TEST_COUNT
+    if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
+      printf("\r\n");
+    }
+    printf("%u,", access_len);
+    #endif // TEST_COUNT
     return;
 }
 

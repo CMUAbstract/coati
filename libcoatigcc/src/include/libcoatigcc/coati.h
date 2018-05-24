@@ -47,6 +47,7 @@ typedef enum {
 /*13*/ TSK_IN_TX_PH1
 } commit;
 
+#ifdef LIBCOATIGCC_TEST_TIMING
 extern unsigned overflows;
 extern unsigned overflows1;
 extern unsigned transition_ticks;
@@ -55,6 +56,18 @@ extern unsigned rw_starts;
 extern unsigned rw_stops;
 extern unsigned trans_starts;
 extern unsigned trans_stops;
+#endif
+
+#ifdef LIBCOATIGCC_TEST_COUNT
+extern unsigned r_tsk_counts;
+extern unsigned r_tx_counts;
+extern unsigned r_ev_counts;
+extern unsigned w_tsk_counts;
+extern unsigned w_tx_counts;
+extern unsigned w_ev_counts;
+extern unsigned access_len;
+extern unsigned total_access_count;
+#endif
 
 extern void *tsk_src[];
 extern void *tsk_dst[];

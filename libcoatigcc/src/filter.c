@@ -110,6 +110,9 @@ int compare_lists(void **ser1, void **ser2, uint16_t len1, uint16_t len2) {
 
 int check_list(void **list, uint16_t len, void * addr) {
   for(uint16_t i = 0; i < len; i++) {
+    #ifdef LIBCOATIGCC_TEST_COUNT
+    access_len++;
+    #endif
     if((void *)list[i] == addr)
       return 1;
   }

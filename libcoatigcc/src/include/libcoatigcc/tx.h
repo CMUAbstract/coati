@@ -6,6 +6,8 @@
 
 #include <libmsp/mem.h>
 
+extern unsigned access_len;
+
 typedef struct _tx_state {
 #ifdef LIBCOATIGCC_BUFFER_ALL
     uint16_t num_dtxv;

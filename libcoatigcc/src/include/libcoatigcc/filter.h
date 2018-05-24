@@ -8,6 +8,8 @@
 #define LOG2_FILTER_SIZE 4
 #define FILTER_BYTES (FILTER_SIZE >> 3)
 
+extern unsigned access_len;
+
 typedef unsigned (*hash_func)(unsigned);
 
 typedef struct bloom_hash_{

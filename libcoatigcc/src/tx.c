@@ -101,6 +101,9 @@ int16_t  tx_find(const void * addr) {
   LCG_PRINTF("num_vars = %x\r\n",num_vars);
     if(num_vars) {
       for(int i = 0; i < num_vars; i++) {
+        #ifdef LIBCOATIGCC_TEST_COUNT
+        access_len++;
+        #endif
         if(addr == tx_src[i]) {
           LCG_PRINTF("Found addr: %x\r\n",addr);
           return i;
