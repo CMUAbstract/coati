@@ -26,7 +26,6 @@ typedef struct _tx_state {
 #define TX_BEGIN \
     tx_begin();
 
-
 #ifdef LIBCOATIGCC_BUFFER_ALL
 // Normal transition_to macro given a different name for programming sanity
 #define TX_TRANSITION_TO(task) \
@@ -41,6 +40,7 @@ typedef struct _tx_state {
 // transition macro for end of a transaction so we don't have TX_END's hanging
 // around
 #define TX_END_TRANSITION_TO(task) \
+    TX_TIMER_STOP \
     curctx->commit_state = TX_PH1; \
     transition_to(TASK_REF(task))
 

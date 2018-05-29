@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
+#include <msp430.h>
 
 #ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
 #define LCG_PRINTF(...)
@@ -63,6 +64,7 @@ __nv tx_state state_0 = {
  */
 void tx_begin() {
     if(((tx_state *)(curctx->extra_state))->in_tx == 0) {
+      TX_TIMER_START
     #ifdef LIBCOATIGCC_BUFFER_ALL
       LCG_PRINTF("Zeroing num_dtxv!!!\r\n");
       ((tx_state *)(curctx->extra_state))->num_dtxv = 0;
@@ -136,7 +138,7 @@ void *  tx_get_dst(void * addr) {
  * @notes: based on persistent var: num_dtv
  */
 void tsk_in_tx_commit_ph2() {
-  uint16_t num_tx_vars =((tx_state *)(curctx->extra_state))->num_dtxv;
+  //uint16_t num_tx_vars =((tx_state *)(curctx->extra_state))->num_dtxv;
   uint16_t i = 0;
   //LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);
   LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);

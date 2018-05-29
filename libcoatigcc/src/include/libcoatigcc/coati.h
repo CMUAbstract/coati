@@ -47,6 +47,11 @@ typedef enum {
 /*13*/ TSK_IN_TX_PH1
 } commit;
 
+#if defined(LIBCOATIGCC_TEST_TIMING) || defined(LIBCOATIGCC_TEST_EV_TIME) \
+  || defined(LIBCOATIGCC_TEST_TX_TIME)
+void add_ticks(unsigned *, unsigned *, unsigned);
+#endif
+
 #ifdef LIBCOATIGCC_TEST_TIMING
 extern unsigned overflows;
 extern unsigned overflows1;
@@ -67,6 +72,22 @@ extern unsigned w_tx_counts;
 extern unsigned w_ev_counts;
 extern unsigned access_len;
 extern unsigned total_access_count;
+#endif
+
+#ifdef LIBCOATIGCC_TEST_DEF_COUNT
+extern unsigned item_count;
+#endif
+
+#ifdef LIBCOATIGCC_TEST_TX_TIME
+extern unsigned overflows_tx;
+extern unsigned tx_ticks;
+extern unsigned tx_count;
+#endif
+
+#ifdef LIBCOATIGCC_TEST_EV_TIME
+extern unsigned overflows_ev;
+extern unsigned ev_ticks;
+extern unsigned ev_count;
 #endif
 
 extern void *tsk_src[];
@@ -212,23 +233,100 @@ void commit_phase2();
 void commit_phase1(); 
 void transition_to(task_t *task);
 
+
+// A unified finishing print statement kind of thing that can get reconfigured
+// here (mostly important for setting print statements during characterization
+#if defined(LIBCOATIGCC_TEST_TX_TIME) 
+#define APP_FINISHED \
+  printf("Tx time: %u + %u\r\n",overflows_tx, tx_ticks);
+#elif defined(LIBCOATIGCC_TEST_EV_TIME)
+  #define APP_FINISHED \
+  printf("Events time: %u + %u\r\n",overflows_ev, ev_ticks);
+#else
+#define APP_FINISHED \
+  ;
+#endif
+
+#if defined(LIBCOATIGCC_TEST_TX_TIME) 
+#pragma message ("initializing evtx monitoring!")
+#define TIMER_INIT \
+  /*TA0CTL = TASSEL__MCLK | MC__STOP | ID_1 | TACLR | TAIE;*/ \
+  TA0EX0 |= 0x3; \
+  /*TA0CTL = TASSEL__ACLK | MC__STOP | ID_0 | TACLR | TAIE;*/ \
+  TA0CTL = TASSEL__SMCLK | MC__STOP | ID_3 | TACLR | TAIE;
+#endif
+
+#if defined(LIBCOATIGCC_TEST_EV_TIME)
+#define TIMER_INIT \
+  TA0CTL = TASSEL__SMCLK | MC__STOP | ID_3 | TACLR | TAIE;
+
+#endif
+
+#ifdef LIBCOATIGCC_TEST_TX_TIME
+#pragma message ("initializing tx start-stop!")
+#define TX_TIMER_START \
+  __delay_cycles(40000); \
+  /*printf("T:%u %u\r\n",overflows_tx,tx_ticks);*/\
+  tx_count++; \
+  TA0CTL |= MC__CONTINUOUS;
+// Pause the timer by setting the MC bits to 0
+#define MODE_SHIFT 4
+#define TX_TIMER_STOP \
+  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+  TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  add_ticks(&overflows_tx, &tx_ticks, TA0R);\
+  /*printf("TX:%u %u\r\n",overflows_tx,tx_ticks);*/\
+  TA0CTL |= TACLR; \
+  TA0R = 0; 
+
+#else
+#define TX_TIMER_START \
+  ;
+#define TX_TIMER_STOP \
+  ;
+#endif // TEXT_TX
+
+#ifdef LIBCOATIGCC_TEST_EV_TIME
+#define EV_TIMER_START \
+  /*__delay_cycles(4000);*/ \
+  /*printf("T %u\r\n",TA0R);*/ \
+  ev_count++; \
+  TA0CTL |= MC__CONTINUOUS;
+// Pause the timer by setting the MC bits to 0
+#define MODE_SHIFT 4
+#define EV_TIMER_STOP \
+  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+  TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  add_ticks(&overflows_ev, &ev_ticks, TA0R);\
+  /*printf("EV:%u %u\r\n",overflows_ev,ev_ticks);*/\
+  TA0CTL |= TACLR; \
+  TA0R = 0; \
+
+#else
+
+#define EV_TIMER_START \
+  ;
+#define EV_TIMER_STOP \
+  ;
+#endif // TEST_EV
+
+
 #ifdef LIBCOATIGCC_TEST_TIMING
 //--------------TIMER I0 initialization stuff----------------
-void add_ticks(unsigned *, unsigned *, unsigned);
 
-// Initiatilize timer with ACLK as clock source, in continuous mode with a
-// prescalar of 8.
+// Initiatilize timer with SMCLK as clock source, in continuous mode with a
+// prescalar of 8 * 4.
 #define TIMER_INIT \
-  /*TA0CTL = TASSEL__ACLK | MC__STOP | ID_0 | TACLR | TAIE;*/ \
+  /*TA0EX0 |= 0x3;*/ \
   TA0CTL = TASSEL__SMCLK | MC__STOP | ID_3 | TACLR | TAIE;
 
 // Restart the timer by setting conintuous mode, we can only get away with doing
 // it this way because pausing sets the MC bits to 0, otherwise we'd need to
 // clear and then overwrite :) 
 #define TRANS_TIMER_START \
-  __delay_cycles(4000); \
+  /*__delay_cycles(4000);*/ \
   trans_starts++; \
-  /*printf("T %u\r\n",TA0R);*/ \
+  /*printf("A %u %u\r\n",trans_starts,trans_stops);*/ \
   TA0CTL |= MC__CONTINUOUS;
 
 // Pause the timer by setting the MC bits to 0
@@ -240,11 +338,12 @@ void add_ticks(unsigned *, unsigned *, unsigned);
   /*printf("F T:%u %u\r\n",overflows,transition_ticks);*/\
   TA0CTL |= TACLR; \
   TA0R = 0; \
-  trans_stops++;
+  trans_stops++;\
+  //printf("X %u %u\r\n",trans_starts,trans_stops);
 
 #define RW_TIMER_START \
   /*printf("R %u\r\n",TA0R); */\
-  __delay_cycles(4000); \
+  /*__delay_cycles(4000); */\
   rw_starts++; \
   TA0CTL |= MC__CONTINUOUS;
 
@@ -261,8 +360,6 @@ void add_ticks(unsigned *, unsigned *, unsigned);
 
 #else // timer
 
-#define TIMER_INIT \
-  ;
 #define TRANS_TIMER_START \
   ;
 #define TRANS_TIMER_STOP \
@@ -271,9 +368,14 @@ void add_ticks(unsigned *, unsigned *, unsigned);
   ;
 #define RW_TIMER_STOP \
   ;
-
-
 #endif
+
+#if !(defined(LIBCOATIGCC_TEST_TIMING)) && !(defined(LIBCOATIGCC_TEST_EV_TIME))\
+ && !(defined(LIBCOATIGCC_TEST_TX_TIME))
+#define TIMER_INIT \
+  ;
+#endif
+
 /** @brief Transfer control to the given task
  *  @param task     Name of the task function
  *  */

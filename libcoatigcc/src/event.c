@@ -77,7 +77,7 @@ __nv uint16_t _numEvents_uncommitted = 0;
  * triggered
  */
 void event_handler(context_t *new_event_ctx) {
-  TRANS_TIMER_START
+  //TRANS_TIMER_START
   // Disable all event interrupts but enable global interrupts
   // NEEDS TO BE DONE IN THAT ORDER!!!!!!!
   _disable_events();
@@ -117,6 +117,7 @@ void event_handler(context_t *new_event_ctx) {
   //printf("SR:%x\r\n",READ_SP);
   // Set curctx with prepackaged event_ctx
   curctx = new_event_ctx;
+  //printf("h: ");
   TRANS_TIMER_STOP
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
