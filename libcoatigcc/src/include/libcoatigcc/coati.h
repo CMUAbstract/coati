@@ -242,9 +242,6 @@ void transition_to(task_t *task);
 #elif defined(LIBCOATIGCC_TEST_EV_TIME)
   #define APP_FINISHED \
   printf("Events time: %u + %u\r\n",overflows_ev, ev_ticks);
-#else
-#define APP_FINISHED \
-  ;
 #endif
 
 #if defined(LIBCOATIGCC_TEST_TX_TIME) 
@@ -358,6 +355,19 @@ void transition_to(task_t *task);
   TA0R = 0;\
   rw_stops++;
 
+#define RW_TIMER_CLEANUP \
+  if(rw_stops != rw_starts) \
+  { TA0CTL &= ~(0x3 << MODE_SHIFT); \
+    TA0CTL |= TACLR; \
+    TA0R = 0;\
+    rw_starts--;} \
+
+#define APP_FINISHED \
+    printf("Time in transition = %u + %u /65536\t %u %u\r\n", \
+                overflows,transition_ticks,trans_starts, trans_stops);\
+    printf("Time in writes and reads = %u + %u /65536\t %u %u\r\n",\
+                    overflows1,rw_ticks,rw_starts, rw_stops);\
+
 #else // timer
 
 #define TRANS_TIMER_START \
@@ -368,11 +378,15 @@ void transition_to(task_t *task);
   ;
 #define RW_TIMER_STOP \
   ;
+#define RW_TIMER_CLEANUP \
+  ;
 #endif
 
 #if !(defined(LIBCOATIGCC_TEST_TIMING)) && !(defined(LIBCOATIGCC_TEST_EV_TIME))\
  && !(defined(LIBCOATIGCC_TEST_TX_TIME))
 #define TIMER_INIT \
+  ;
+#define APP_FINISHED \
   ;
 #endif
 

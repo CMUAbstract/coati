@@ -125,8 +125,9 @@ void *  tx_get_dst(void * addr) {
   uint16_t num_vars = ((tx_state *)curctx->extra_state)->num_dtxv;
   if(num_vars) {
     for(int i = 0; i < num_vars; i++) {
-      if(addr == tx_src[i])
+      if(addr == tx_src[i]) {
         return tx_dst[i];
+      }
     }
   }
     return NULL;
@@ -144,6 +145,7 @@ void tsk_in_tx_commit_ph2() {
   LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);
   // Cycle through all the variables to commit
   while(num_dtv > 0) {
+    LCG_PRINTF("%u num_dtv ",num_dtv);
     void *dst = tx_get_dst(tsk_src[num_dtv - 1]);
     if(dst != NULL) {
         //LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",

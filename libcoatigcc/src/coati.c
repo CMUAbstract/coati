@@ -869,7 +869,6 @@ int main() {
     // an event or not
     _init();
     _numBoots++;
-    __delay_cycles(4000000);
     TRANS_TIMER_START
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     #ifdef LIBCOATIGCC_TEST_DEF_COUNT
@@ -950,8 +949,22 @@ void add_ticks(unsigned *overflow, unsigned *ticks, unsigned new_ticks) {
   }
   return;
 }
+
+void __attribute__((interrupt(TIMER0_A1_VECTOR))) Timer0_A1_ISR(void) {
+  TA0CTL = TACLR;
+  #ifdef LIBCOATIGCC_TEST_EV_TIME
+    overflows_ev++;
+  #elif defined(LIBCOATIGCC_TEST_TX_TIME)
+    overflows_tx++;
+    P1OUT |= BIT0;
+    P1DIR |= BIT0;
+    P1OUT &= ~BIT0;
+  #endif
+  TA0CTL = TASSEL__SMCLK | MC__CONTINUOUS | ID_3 | TACLR | TAIE;
+}
 #if 0
 void __attribute__((interrupt(TIMER0_A0_VECTOR))) Timer0_A0_ISR(void) {
+    TA0CTL = TACLR;
 switch(__even_in_range(TA0IV, TA0IV_TAIFG))
   {
     case TA0IV_NONE:   break;               // No interrupt
@@ -965,8 +978,9 @@ switch(__even_in_range(TA0IV, TA0IV_TAIFG))
     #ifdef LIBCOATIGCC_TEST_EV_TIME
       overflows_ev++;
     #elif defined(LIBCOATIGCC_TEST_TX_TIME)
-      //overflows_tx++;
+      overflows_tx++;
     #endif
+    //TA0CTL = TASSEL__ACLK | MC__CONTINUOUS | ID_0 | TACLR | TAIE;
 
     default:
       break;
