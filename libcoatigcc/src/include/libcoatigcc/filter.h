@@ -34,4 +34,11 @@ int check_list(void **, uint16_t, void *);
 void clear_filter(bloom_filter *);
 
 void print_filter(bloom_filter *);
+
+#if defined(LIBCOATIGCC_TEST_DEF_COUNT) || defined(LIBCOATIGCC_TEST_COUNT)
+// A couple of extras
+void add_to_histogram(unsigned val);
+void print_histogram(void);
+#endif // DEF_COUNT, TEST_COUNT
+
 #endif //BLOOM_FILTER_H

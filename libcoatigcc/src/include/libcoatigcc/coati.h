@@ -242,6 +242,10 @@ void transition_to(task_t *task);
 #elif defined(LIBCOATIGCC_TEST_EV_TIME)
   #define APP_FINISHED \
   printf("Events time: %u + %u\r\n",overflows_ev, ev_ticks);
+#elif defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_TEST_DEF_COUNT)
+  #define APP_FINISHED \
+  printf("Histogram:\r\n");\
+  print_histogram();
 #endif
 
 #if defined(LIBCOATIGCC_TEST_TX_TIME) 
@@ -285,7 +289,7 @@ void transition_to(task_t *task);
 
 #ifdef LIBCOATIGCC_TEST_EV_TIME
 #define EV_TIMER_START \
-  /*__delay_cycles(4000);*/ \
+  __delay_cycles(4000); \
   /*printf("T %u\r\n",TA0R);*/ \
   ev_count++; \
   TA0CTL |= MC__CONTINUOUS;
@@ -339,8 +343,8 @@ void transition_to(task_t *task);
   //printf("X %u %u\r\n",trans_starts,trans_stops);
 
 #define RW_TIMER_START \
-  /*printf("R %u\r\n",TA0R); */\
-  /*__delay_cycles(4000); */\
+  /*printf("RW timer start\r\n");*/\
+  /*__delay_cycles(4000);*/\
   rw_starts++; \
   TA0CTL |= MC__CONTINUOUS;
 
@@ -350,6 +354,7 @@ void transition_to(task_t *task);
   /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
   TA0CTL &= ~(0x3 << MODE_SHIFT); \
   add_ticks(&overflows1, &rw_ticks, TA0R);\
+  /*printf("RW timer stop\r\n");*/\
   /*printf("F R:%u %u\r\n",overflows1,rw_ticks);*/\
   TA0CTL |= TACLR; \
   TA0R = 0;\
@@ -383,10 +388,15 @@ void transition_to(task_t *task);
 #endif
 
 #if !(defined(LIBCOATIGCC_TEST_TIMING)) && !(defined(LIBCOATIGCC_TEST_EV_TIME))\
- && !(defined(LIBCOATIGCC_TEST_TX_TIME))
-#define TIMER_INIT \
-  ;
+ && !(defined(LIBCOATIGCC_TEST_TX_TIME)) && !(defined(LIBCOATIGCC_TEST_COUNT))\
+ && !(defined(LIBCOATIGCC_TEST_DEF_COUNT))
 #define APP_FINISHED \
+  ;
+#endif
+
+#if !(defined(LIBCOATIGCC_TEST_TIMING)) && !(defined(LIBCOATIGCC_TEST_EV_TIME))\
+ && !(defined(LIBCOATIGCC_TEST_TX_TIME))
+ #define TIMER_INIT \
   ;
 #endif
 

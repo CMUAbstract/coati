@@ -41,6 +41,7 @@ __nv unsigned total_access_count = 0;
 #endif
 
 #ifdef LIBCOATIGCC_TEST_TX_TIME
+#pragma message ("Setting tx time!")
 unsigned overflows_tx = 0;
 unsigned tx_ticks = 0;
 unsigned tx_count = 0;
@@ -313,10 +314,14 @@ void * read(const void *addr, unsigned size, acc_type acc) {
     }
     LCG_PRINTF("Reading from %x \r\n",dst);
     #ifdef LIBCOATIGCC_TEST_COUNT
-    if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
+    /*if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
       printf("\r\n");
     }
-    printf("%u,", access_len);
+    printf("%u,", access_len);*/
+    add_to_histogram(access_len);
+    /*if(total_access_count > 64 && (total_access_count & 0x3F) == 0) {
+      add_to_histogram(access_len);
+    }*/
     #endif // TEST_COUNT
     return dst;
 }
@@ -480,10 +485,11 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             while(1);
     }
     #ifdef LIBCOATIGCC_TEST_COUNT
-    if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
+    /*if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
       printf("\r\n");
     }
-    printf("%u,", access_len);
+    printf("%u,", access_len);*/
+    add_to_histogram(access_len);
     #endif // TEST_COUNT
     return;
 }
@@ -624,7 +630,8 @@ void commit_phase2() {
       switch(curctx->commit_state) {
         case TSK_COMMIT:
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-          printf("%u,0,0\r\n",num_dtv);
+          //printf("%u,0,0\r\n",num_dtv);
+          add_to_histogram(num_dtv);
           #endif
           tsk_commit_ph2();
 
@@ -646,7 +653,8 @@ void commit_phase2() {
         #ifdef LIBCOATIGCC_BUFFER_ALL
         case TSK_IN_TX_COMMIT:
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-          printf("%u,0,0\r\n",num_dtv);
+          //printf("%u,0,0\r\n",num_dtv);
+          add_to_histogram(num_dtv);
           #endif
           tsk_in_tx_commit_ph2();
           LCG_PRINTF("dtxv = %u\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
@@ -663,8 +671,10 @@ void commit_phase2() {
           item_count = ((ev_state *)curctx->extra_ev_state)->num_devv + num_dtv
                       + ((tx_state *)curctx->extra_state)->num_dtxv;
           if(!((tx_state *)curctx->extra_state)->in_tx) {
-            printf("0,0,%u\r\n",item_count);
+            //printf("0,0,%u\r\n",item_count);
+            add_to_histogram(item_count);
           }
+          
           #endif
           // Finish committing current tsk
           tsk_in_tx_commit_ph2();
@@ -673,7 +683,8 @@ void commit_phase2() {
           #else
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           item_count = num_dtv;
-          printf("0,0,%u\r\n",item_count);
+          add_to_histogram(item_count);
+          //printf("0,0,%u\r\n",item_count);
           #endif
           // Commit last task
           tsk_commit_ph2();
@@ -705,7 +716,8 @@ void commit_phase2() {
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           if(((tx_state *)curctx->extra_state)->in_tx == 0) {
             item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
-            printf("0,%u,0\r\n",item_count);
+            add_to_histogram(item_count);
+            //printf("0,%u,0\r\n",item_count);
           }
           #endif
           ((tx_state *)curctx->extra_state)->num_read = 0;
@@ -715,7 +727,8 @@ void commit_phase2() {
           #else
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
-          printf("0,%u,0\r\n",item_count);
+          add_to_histogram(item_count);
+          //printf("0,%u,0\r\n",item_count);
           #endif
           #endif //BUFFER_ALL
           ev_commit_ph2();
@@ -778,7 +791,7 @@ void transition_to(task_t *next_task)
   TRANS_TIMER_START
   LCG_PRINTF("TT commit state = %u, in tx = %u, addr %x\r\n",curctx->commit_state,
   ((tx_state *)curctx->extra_state)->in_tx, curctx->task->func);
-  
+
   context_t *next_ctx;
   tx_state *new_tx_state;
   ev_state *new_ev_state;
@@ -805,7 +818,7 @@ void transition_to(task_t *next_task)
     new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
                     &state_ev_0);
   #endif // BUFFER_ALL
-  
+
   // Set the next task here so we don't overwrite modifications from commit_phase1
   next_ctx->task = next_task;
 
@@ -816,7 +829,18 @@ void transition_to(task_t *next_task)
   // Now point the next context
   next_ctx->extra_state = new_tx_state;
   next_ctx->extra_ev_state = new_ev_state;
-
+  #if defined(LIBCOATIGCC_ATOMICS) && defined(LIBCOATIGCC_TEST_TX_TIME)
+  // Start timer if we're going from not in atomic region to atomic region
+  if(!curctx->task->atomic && next_ctx->task->atomic && 
+           !(((ev_state *)curctx->extra_ev_state)->in_ev)) {
+    TX_TIMER_START;
+  }
+  // Stop timer if we're leaving an atomic region
+  if(curctx->task->atomic && !next_ctx->task->atomic && 
+          !(((ev_state *)curctx->extra_ev_state)->in_ev)) {
+    TX_TIMER_STOP;
+  }
+  #endif
   curctx = next_ctx;
   #ifdef LIBCOATIGCC_BUFFER_ALL
   LCG_PRINTF("Got %x num_dtxv\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
@@ -873,8 +897,8 @@ int main() {
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     #ifdef LIBCOATIGCC_TEST_DEF_COUNT
     #pragma message ("Delaying for def test")
-    __delay_cycles(4000000);
-    printf("TSK,EV,TX\r\n");
+    //__delay_cycles(4000000);
+    //printf("TSK,EV,TX\r\n");
     #endif
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL
@@ -915,7 +939,7 @@ int main() {
       TRANS_TIMER_STOP
       _enable_events();
       #else
-        if(curctx->extra_ev_state->in_ev == 0){
+        if(((ev_state *)(curctx->extra_ev_state))->in_ev == 0){
           TRANS_TIMER_STOP
           _enable_events();
         }
