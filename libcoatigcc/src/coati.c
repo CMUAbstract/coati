@@ -53,6 +53,18 @@ unsigned ev_ticks = 0;
 unsigned ev_count = 0;
 #endif
 
+#if defined(LIBCOATIGCC_TEST_WAIT_TIME)
+unsigned overflows_wait = 0;
+unsigned wait_ticks = 0;
+unsigned wait_count = 0;
+
+/*void __attribute__((interrupt(TIMER0_A1_VECTOR))) Timer0_A1_ISR(void) {
+  TA0CTL = TACLR;
+  overflows_wait++;
+  TA0CTL = TASSEL__SMCLK | MC__CONTINUOUS | ID_3 | TACLR | TAIE;
+}*/
+#endif
+
 #ifdef LIBCOATIGCC_TEST_DEF_COUNT
 unsigned item_count = 0;
 #endif
@@ -314,14 +326,8 @@ void * read(const void *addr, unsigned size, acc_type acc) {
     }
     LCG_PRINTF("Reading from %x \r\n",dst);
     #ifdef LIBCOATIGCC_TEST_COUNT
-    /*if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
-      printf("\r\n");
-    }
-    printf("%u,", access_len);*/
+    // printf("\r\n%s: %u\r\n",curctx->task->name, access_len);
     add_to_histogram(access_len);
-    /*if(total_access_count > 64 && (total_access_count & 0x3F) == 0) {
-      add_to_histogram(access_len);
-    }*/
     #endif // TEST_COUNT
     return dst;
 }
@@ -485,10 +491,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             while(1);
     }
     #ifdef LIBCOATIGCC_TEST_COUNT
-    /*if(total_access_count > 16 && (total_access_count & 0xF) == 0) {
-      printf("\r\n");
-    }
-    printf("%u,", access_len);*/
+    // printf("\r\n%s: %u\r\n",curctx->task->name, access_len);
     add_to_histogram(access_len);
     #endif // TEST_COUNT
     return;
@@ -962,7 +965,7 @@ int main() {
 }
 
 #if defined(LIBCOATIGCC_TEST_TIMING) || defined(LIBCOATIGCC_TEST_TX_TIME) \
-  || defined(LIBCOATIGCC_TEST_EV_TIME)
+  || defined(LIBCOATIGCC_TEST_EV_TIME) || defined(LIBCOATIGCC_TEST_WAIT_TIME)
 void add_ticks(unsigned *overflow, unsigned *ticks, unsigned new_ticks) {
   if(new_ticks > (0xFFFF - *ticks)) {
     (*overflow)++;
@@ -980,9 +983,12 @@ void __attribute__((interrupt(TIMER0_A1_VECTOR))) Timer0_A1_ISR(void) {
     overflows_ev++;
   #elif defined(LIBCOATIGCC_TEST_TX_TIME)
     overflows_tx++;
-    P1OUT |= BIT0;
-    P1DIR |= BIT0;
-    P1OUT &= ~BIT0;
+    TA0EX0 |= 0x3; 
+  #elif defined(LIBCOATIGCC_TEST_WAIT_TIME)
+    overflows_wait++;
+    //TA0EX0 |= 0x3; 
+  #elif defined(LIBCOATIGCC_TEST_TIMING)
+    overflows++;
   #endif
   TA0CTL = TASSEL__SMCLK | MC__CONTINUOUS | ID_3 | TACLR | TAIE;
 }

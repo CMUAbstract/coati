@@ -48,7 +48,7 @@ typedef enum {
 } commit;
 
 #if defined(LIBCOATIGCC_TEST_TIMING) || defined(LIBCOATIGCC_TEST_EV_TIME) \
-  || defined(LIBCOATIGCC_TEST_TX_TIME)
+|| defined(LIBCOATIGCC_TEST_TX_TIME) || defined(LIBCOATIGCC_TEST_WAIT_TIME)
 void add_ticks(unsigned *, unsigned *, unsigned);
 #endif
 
@@ -244,6 +244,7 @@ void transition_to(task_t *task);
   printf("Events time: %u + %u\r\n",overflows_ev, ev_ticks);
 #elif defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_TEST_DEF_COUNT)
   #define APP_FINISHED \
+  #pragma message ("Either test_count or test_def_count defined!\r\n")
   printf("Histogram:\r\n");\
   print_histogram();
 #endif
@@ -325,7 +326,7 @@ void transition_to(task_t *task);
 // it this way because pausing sets the MC bits to 0, otherwise we'd need to
 // clear and then overwrite :) 
 #define TRANS_TIMER_START \
-  /*__delay_cycles(4000);*/ \
+  __delay_cycles(4000); \
   trans_starts++; \
   /*printf("A %u %u\r\n",trans_starts,trans_stops);*/ \
   TA0CTL |= MC__CONTINUOUS;
@@ -333,7 +334,7 @@ void transition_to(task_t *task);
 // Pause the timer by setting the MC bits to 0
 #define MODE_SHIFT 4
 #define TRANS_TIMER_STOP \
-  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+  /*printf("stop\r\n");*/ \
   TA0CTL &= ~(0x3 << MODE_SHIFT); \
   add_ticks(&overflows, &transition_ticks, TA0R);\
   /*printf("F T:%u %u\r\n",overflows,transition_ticks);*/\
@@ -389,15 +390,56 @@ void transition_to(task_t *task);
 
 #if !(defined(LIBCOATIGCC_TEST_TIMING)) && !(defined(LIBCOATIGCC_TEST_EV_TIME))\
  && !(defined(LIBCOATIGCC_TEST_TX_TIME)) && !(defined(LIBCOATIGCC_TEST_COUNT))\
- && !(defined(LIBCOATIGCC_TEST_DEF_COUNT))
+ && !(defined(LIBCOATIGCC_TEST_DEF_COUNT)) && !(defined(LIBCOATIGCC_TEST_WAIT_TIME))
 #define APP_FINISHED \
   ;
 #endif
 
 #if !(defined(LIBCOATIGCC_TEST_TIMING)) && !(defined(LIBCOATIGCC_TEST_EV_TIME))\
- && !(defined(LIBCOATIGCC_TEST_TX_TIME))
+&& !(defined(LIBCOATIGCC_TEST_TX_TIME)) && !(defined(LIBCOATIGCC_TEST_WAIT_TIME))
  #define TIMER_INIT \
   ;
+#endif
+
+#if defined(LIBCOATIGCC_TEST_WAIT_TIME)
+  #pragma message "test wait time"
+extern unsigned overflows_wait;
+extern unsigned wait_ticks;
+extern unsigned wait_count;
+#define TIMER_INIT \
+  /*TA0EX0 |= 0x3;*/ \
+  TA0CTL = TASSEL__SMCLK | MC__STOP | ID_3 | TACLR | TAIE;
+
+#define WAIT_TIMER_START \
+  /*printf("T %u\r\n",TA0R);*/ \
+  if(!wait_count) {\
+    wait_count=1; \
+    __delay_cycles(4000); \
+    TA0CTL |= MC__CONTINUOUS;\
+  }
+
+// Pause the timer by setting the MC bits to 0
+#define MODE_SHIFT 4
+#define WAIT_TIMER_STOP \
+  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+  TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  add_ticks(&overflows_wait, &wait_ticks, TA0R);\
+  /*printf("EV:%u %u\r\n",overflows_ev,ev_ticks);*/\
+  TA0CTL |= TACLR; \
+  TA0R = 0; \
+  wait_count = 0;
+
+#define APP_FINISHED \
+  printf("Wait time: %u + %u\r\n",overflows_wait, wait_ticks);
+
+#else
+
+#define WAIT_TIMER_START \
+  ;
+
+#define WAIT_TIMER_STOP \
+  ;
+
 #endif
 
 /** @brief Transfer control to the given task
