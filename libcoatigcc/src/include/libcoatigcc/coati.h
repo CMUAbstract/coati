@@ -61,6 +61,31 @@ extern unsigned rw_starts;
 extern unsigned rw_stops;
 extern unsigned trans_starts;
 extern unsigned trans_stops;
+
+extern unsigned ev_tran_ticks;
+extern unsigned overflows_ev_tran;
+
+extern unsigned tx_tran_ticks;
+extern unsigned overflows_tx_tran;
+
+extern unsigned tsk_tran_ticks;
+extern unsigned overflows_tsk_tran;
+
+extern unsigned tsk_in_tx_tran_ticks;
+extern unsigned overflows_tsk_in_tx_tran;
+
+extern unsigned errors;
+extern unsigned instrument;
+
+typedef enum trans_type_{
+  TSK_CMT,
+  TSK_IN_TX_CMT,
+  EV_CMT,
+  TX_CMT
+} trans_type;
+
+extern trans_type cur_trans;
+
 #endif
 
 #ifdef LIBCOATIGCC_TEST_COUNT
@@ -72,10 +97,12 @@ extern unsigned w_tx_counts;
 extern unsigned w_ev_counts;
 extern unsigned access_len;
 extern unsigned total_access_count;
+extern unsigned instrument;
 #endif
 
 #ifdef LIBCOATIGCC_TEST_DEF_COUNT
 extern unsigned item_count;
+extern unsigned instrument;
 #endif
 
 #ifdef LIBCOATIGCC_TEST_TX_TIME
@@ -326,53 +353,92 @@ void transition_to(task_t *task);
 // it this way because pausing sets the MC bits to 0, otherwise we'd need to
 // clear and then overwrite :) 
 #define TRANS_TIMER_START \
-  __delay_cycles(4000); \
+  if(instrument) { \
+  /*__delay_cycles(4000);*/ \
   trans_starts++; \
   /*printf("A %u %u\r\n",trans_starts,trans_stops);*/ \
-  TA0CTL |= MC__CONTINUOUS;
+  TA0CTL |= MC__CONTINUOUS;\
+  } \
 
 // Pause the timer by setting the MC bits to 0
 #define MODE_SHIFT 4
 #define TRANS_TIMER_STOP \
+  if(instrument) { \
   /*printf("stop\r\n");*/ \
   TA0CTL &= ~(0x3 << MODE_SHIFT); \
-  add_ticks(&overflows, &transition_ticks, TA0R);\
+  static unsigned *overflow_ptr_, *ticks_ptr_; \
+  switch(cur_trans){ \
+    case TSK_CMT: overflow_ptr_ = &overflows_tsk_tran; \
+      ticks_ptr_ = &tsk_tran_ticks; break;\
+    case TSK_IN_TX_CMT:overflow_ptr_ = &overflows_tsk_in_tx_tran; \
+      ticks_ptr_ = &tsk_in_tx_tran_ticks; break;\
+    case EV_CMT:overflow_ptr_ = &overflows_ev_tran; \
+      ticks_ptr_ = &ev_tran_ticks; break;\
+    case TX_CMT:overflow_ptr_ = &overflows_tx_tran; \
+      ticks_ptr_ = &tx_tran_ticks; break;\
+    default: overflow_ptr_ = &overflows_tx_tran; \
+      ticks_ptr_ = &tx_tran_ticks; break;\
+  }\
+  add_ticks(overflow_ptr_, ticks_ptr_, TA0R);\
   /*printf("F T:%u %u\r\n",overflows,transition_ticks);*/\
   TA0CTL |= TACLR; \
   TA0R = 0; \
   trans_stops++;\
+  } \
+  else { instrument = 1;}
   //printf("X %u %u\r\n",trans_starts,trans_stops);
 
+#define SET_TSK_TRANS \
+  cur_trans = TSK_CMT;
+#define SET_TSK_IN_TX_TRANS \
+  cur_trans = TSK_IN_TX_CMT;
+#define SET_EV_TRANS \
+  cur_trans = EV_CMT;
+#define SET_TX_TRANS \
+  cur_trans = TX_CMT;
+
 #define RW_TIMER_START \
+    ;
   /*printf("RW timer start\r\n");*/\
-  /*__delay_cycles(4000);*/\
+  /*__delay_cycles(4000);\
   rw_starts++; \
-  TA0CTL |= MC__CONTINUOUS;
+  TA0CTL |= MC__CONTINUOUS;*/
 
 // Pause the timer by setting the MC bits to 0
 #define MODE_SHIFT 4
 #define RW_TIMER_STOP \
+    ;
   /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
-  TA0CTL &= ~(0x3 << MODE_SHIFT); \
-  add_ticks(&overflows1, &rw_ticks, TA0R);\
+  /*TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  add_ticks(&overflows1, &rw_ticks, TA0R);\*/
   /*printf("RW timer stop\r\n");*/\
   /*printf("F R:%u %u\r\n",overflows1,rw_ticks);*/\
-  TA0CTL |= TACLR; \
+  /*TA0CTL |= TACLR; \
   TA0R = 0;\
-  rw_stops++;
+  rw_stops++;*/
 
 #define RW_TIMER_CLEANUP \
-  if(rw_stops != rw_starts) \
+    ;
+  /*if(rw_stops != rw_starts) \
   { TA0CTL &= ~(0x3 << MODE_SHIFT); \
     TA0CTL |= TACLR; \
     TA0R = 0;\
-    rw_starts--;} \
+    rw_starts--;} \*/
 
 #define APP_FINISHED \
-    printf("Time in transition = %u + %u /65536\t %u %u\r\n", \
-                overflows,transition_ticks,trans_starts, trans_stops);\
-    printf("Time in writes and reads = %u + %u /65536\t %u %u\r\n",\
-                    overflows1,rw_ticks,rw_starts, rw_stops);\
+    printf("Time in tsk-only transition = %u + %u\r\n", \
+                overflows_tsk_tran,tsk_tran_ticks);\
+    printf("Time in tsk_in_tx transition = %u + %u\r\n", \
+                overflows_tsk_in_tx_tran,tsk_in_tx_tran_ticks);\
+    printf("Time in ev-only transition = %u + %u\r\n", \
+                overflows_ev_tran,ev_tran_ticks);\
+    printf("Time in tx-only transition = %u + %u\r\n", \
+                overflows_tx_tran,tx_tran_ticks);\
+    printf("total errors: %u\r\n",errors);
+    /*printf("Time in transition = %u + %u /65536\t %u %u\r\n", \
+                overflows,transition_ticks,trans_starts, trans_stops);\*/
+    /*printf("Time in writes and reads = %u + %u /65536\t %u %u\r\n",\
+                    overflows1,rw_ticks,rw_starts, rw_stops);\*/
 
 #else // timer
 
@@ -385,6 +451,14 @@ void transition_to(task_t *task);
 #define RW_TIMER_STOP \
   ;
 #define RW_TIMER_CLEANUP \
+  ;
+#define SET_TSK_TRANS \
+  ;
+#define SET_TSK_IN_TX_TRANS \
+  ;
+#define SET_EV_TRANS \
+  ;
+#define SET_TX_TRANS \
   ;
 #endif
 
@@ -447,7 +521,24 @@ extern unsigned wait_count;
  *  */
 #define TRANSITION_TO(task) \
     curctx->commit_state = TSK_PH1;\
+    SET_TSK_TRANS \
     transition_to(TASK_REF(task))
+
+/**
+ * @brief extra transition for instrumentation purposes
+ * @details This won't add to deferred update counts
+ */
+#ifdef LIBCOATIGCC_TEST_DEF_COUNT
+#define NI_TRANSITION_TO(task) \
+    curctx->commit_state = TSK_PH1;\
+    instrument = 0; \
+    transition_to(TASK_REF(task))
+#else
+#define NI_TRANSITION_TO(task) \
+    curctx->commit_state = TSK_PH1;\
+    transition_to(TASK_REF(task))
+
+#endif
 
 #define TRANSITION_FIRST(task) transition_to(TASK_REF(task))
 
@@ -470,5 +561,30 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
       write(&(x),sizeof(type),NORMAL,_temp_loc);\
       RW_TIMER_STOP \
     }
+/**
+ * @brief extra key words mostly for instrumentation
+ * @details the vision is for these to be writes/reads that know they have to go
+ * directly into the buffer (b/c no write to the data has happened yet) or
+ * straight to memory to read the value (again, b/c no write to the data has
+ * happened) For now they're just "non-instrumented"
+ */
+#ifdef LIBCOATIGCC_TEST_COUNT
+#define NI_WRITE(x,val,type,is_ptr) \
+    { instrument = 0; \
+      type _temp_loc = val;\
+      write(&(x),sizeof(type),NORMAL,_temp_loc);\
+    }
 
+#define NI_READ(x,type) \
+      *((type *)read(&(x),sizeof(type),NORMAL_NI))
+#else
+#define NI_WRITE(x,val,type,is_ptr) \
+    { type _temp_loc = val;\
+      write(&(x),sizeof(type),NORMAL,_temp_loc);\
+    }
+
+#define NI_READ(x,type) \
+    *((type *)read(&(x),sizeof(type),NORMAL))
+
+#endif
 #endif // COATI_H

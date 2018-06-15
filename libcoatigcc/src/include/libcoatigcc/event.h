@@ -148,6 +148,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 // Macro to handle first and second phase of commit
 #ifdef LIBCOATIGCC_BUFFER_ALL
 #define EVENT_RETURN() \
+        SET_EV_TRANS \
         EV_TIMER_STOP \
         /*TRANS_TIMER_START*/ \
         curctx->commit_state = EV_PH1;\
@@ -155,6 +156,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 #else
 
 #define EVENT_RETURN() \
+        SET_EV_TRANS \
         EV_TIMER_STOP \
         /*TRANS_TIMER_START*/ \
         curctx->commit_state = EV_PH1;\

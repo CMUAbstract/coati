@@ -17,16 +17,32 @@
 #include "types.h"
 
 #ifdef LIBCOATIGCC_TEST_TIMING
+#pragma message "setup timing test"
 // For instrumentation
 __nv unsigned overflows = 0;
 __nv unsigned overflows1 = 0;
 unsigned transition_ticks = 0;
 unsigned rw_ticks = 0;
 
-unsigned rw_starts = 0;
-unsigned rw_stops= 0;
+unsigned ev_tran_ticks = 0;
+unsigned overflows_ev_tran = 0;
+
+unsigned tx_tran_ticks = 0;
+unsigned overflows_tx_tran = 0;
+
+unsigned tsk_tran_ticks = 0;
+unsigned overflows_tsk_tran = 0;
+
+unsigned tsk_in_tx_tran_ticks = 0;
+unsigned overflows_tsk_in_tx_tran = 0;
+
+
+unsigned errors = 0;
 unsigned trans_starts= 0;
 unsigned trans_stops= 0;
+unsigned instrument = 1;
+
+trans_type cur_trans = TSK_CMT;
 #endif
 
 #ifdef LIBCOATIGCC_TEST_COUNT
@@ -38,6 +54,7 @@ unsigned w_tx_counts = 0;
 unsigned w_ev_counts = 0;
 unsigned access_len = 0;
 __nv unsigned total_access_count = 0;
+unsigned instrument = 1;
 #endif
 
 #ifdef LIBCOATIGCC_TEST_TX_TIME
@@ -67,6 +84,7 @@ unsigned wait_count = 0;
 
 #ifdef LIBCOATIGCC_TEST_DEF_COUNT
 unsigned item_count = 0;
+unsigned instrument = 1;
 #endif
 /* To update the context, fill-in the unused one and flip the pointer to it */
 __nv context_t context_1 = {0};
@@ -245,6 +263,11 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 dst = (void *) addr;
             }
             break;
+        #ifdef LIBCOATIGCC_TEST_COUNT
+        case NORMAL_NI:
+            instrument = 0;
+            // Fall through
+        #endif
         case NORMAL:
             index = tsk_find(addr);
             if(index > -1) {
@@ -257,6 +280,11 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 dst = (void *) addr;
             }
             break;
+        #ifdef LIBCOATIGCC_TEST_COUNT
+        case TX_NI:
+            instrument = 0;
+            // Fall through
+        #endif
         case TX:
             // Add to read filter for tx
             LCG_PRINTF("TX READ %x\r\n",addr);
@@ -327,7 +355,12 @@ void * read(const void *addr, unsigned size, acc_type acc) {
     LCG_PRINTF("Reading from %x \r\n",dst);
     #ifdef LIBCOATIGCC_TEST_COUNT
     // printf("\r\n%s: %u\r\n",curctx->task->name, access_len);
-    add_to_histogram(access_len);
+    if(instrument) {
+      add_to_histogram(access_len);
+    }
+    else {
+      instrument = 1;
+    }
     #endif // TEST_COUNT
     return dst;
 }
@@ -492,7 +525,12 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
     }
     #ifdef LIBCOATIGCC_TEST_COUNT
     // printf("\r\n%s: %u\r\n",curctx->task->name, access_len);
-    add_to_histogram(access_len);
+    if(instrument) {
+      add_to_histogram(access_len);
+    }
+    else {
+      instrument = 1;
+    }
     #endif // TEST_COUNT
     return;
 }
@@ -634,7 +672,10 @@ void commit_phase2() {
         case TSK_COMMIT:
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           //printf("%u,0,0\r\n",num_dtv);
-          add_to_histogram(num_dtv);
+          if(instrument)
+            add_to_histogram(num_dtv);
+          else
+            instrument = 1;
           #endif
           tsk_commit_ph2();
 
@@ -649,7 +690,7 @@ void commit_phase2() {
               LCG_PRINTF("To the queue!\r\n");
               queued_event_handoff();
             }
-          } 
+          }
           curctx->commit_state = NO_COMMIT;
           #endif // BUFFER_ALL
           break;
@@ -657,7 +698,10 @@ void commit_phase2() {
         case TSK_IN_TX_COMMIT:
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           //printf("%u,0,0\r\n",num_dtv);
-          add_to_histogram(num_dtv);
+          if(instrument)
+            add_to_histogram(num_dtv);
+          else
+            instrument = 1;
           #endif
           tsk_in_tx_commit_ph2();
           LCG_PRINTF("dtxv = %u\r\n",((tx_state *)curctx->extra_state)->num_dtxv);
@@ -675,9 +719,12 @@ void commit_phase2() {
                       + ((tx_state *)curctx->extra_state)->num_dtxv;
           if(!((tx_state *)curctx->extra_state)->in_tx) {
             //printf("0,0,%u\r\n",item_count);
+          if(instrument)
             add_to_histogram(item_count);
+          else
+            instrument = 1;
           }
-          
+
           #endif
           // Finish committing current tsk
           tsk_in_tx_commit_ph2();
@@ -686,7 +733,11 @@ void commit_phase2() {
           #else
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           item_count = num_dtv;
-          add_to_histogram(item_count);
+          if(instrument)
+            add_to_histogram(item_count);
+          else
+            instrument = 1;
+          }
           //printf("0,0,%u\r\n",item_count);
           #endif
           // Commit last task
@@ -719,7 +770,10 @@ void commit_phase2() {
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           if(((tx_state *)curctx->extra_state)->in_tx == 0) {
             item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
+          if(instrument)
             add_to_histogram(item_count);
+          else
+            instrument = 1;
             //printf("0,%u,0\r\n",item_count);
           }
           #endif
@@ -730,7 +784,10 @@ void commit_phase2() {
           #else
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
-          add_to_histogram(item_count);
+          if(instrument)
+            add_to_histogram(item_count);
+          else
+            instrument = 1;
           //printf("0,%u,0\r\n",item_count);
           #endif
           #endif //BUFFER_ALL
@@ -896,7 +953,6 @@ int main() {
     // an event or not
     _init();
     _numBoots++;
-    TRANS_TIMER_START
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     #ifdef LIBCOATIGCC_TEST_DEF_COUNT
     #pragma message ("Delaying for def test")
@@ -929,25 +985,20 @@ int main() {
     #if defined(LIBCOATIGCC_ATOMICS) && defined(LIBCOATIGCC_ATOMICS_HW)
       if(curctx->task->atomic == 0) {
         LCG_PRINTF("not atomic\r\n");
-        TRANS_TIMER_STOP
         _enable_events();
       }
       else {
         LCG_PRINTF("atomic\r\n");
-        TRANS_TIMER_STOP
         _disable_events();
       }
     #else
       #ifdef LIBCOATIGCC_BUFFER_ALL
-      TRANS_TIMER_STOP
       _enable_events();
       #else
         if(((ev_state *)(curctx->extra_ev_state))->in_ev == 0){
-          TRANS_TIMER_STOP
           _enable_events();
         }
         else {
-          TRANS_TIMER_STOP
           _disable_events();
         }
       #endif // BUFFER_ALL
@@ -988,7 +1039,7 @@ void __attribute__((interrupt(TIMER0_A1_VECTOR))) Timer0_A1_ISR(void) {
     overflows_wait++;
     //TA0EX0 |= 0x3; 
   #elif defined(LIBCOATIGCC_TEST_TIMING)
-    overflows++;
+    errors++;
   #endif
   TA0CTL = TASSEL__SMCLK | MC__CONTINUOUS | ID_3 | TACLR | TAIE;
 }

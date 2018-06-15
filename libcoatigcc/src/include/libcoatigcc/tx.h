@@ -29,10 +29,12 @@ typedef struct _tx_state {
 #ifdef LIBCOATIGCC_BUFFER_ALL
 // Normal transition_to macro given a different name for programming sanity
 #define TX_TRANSITION_TO(task) \
+    SET_TSK_IN_TX_TRANS \
     curctx->commit_state = TSK_IN_TX_PH1; \
     transition_to(TASK_REF(task))
 #else
 #define TX_TRANSITION_TO(task) \
+    SET_TSK_IN_TX_TRANS \
     curctx->commit_state = TSK_PH1; \
     transition_to(TASK_REF(task))
 #endif // BUFFER_ALL
@@ -40,11 +42,51 @@ typedef struct _tx_state {
 // transition macro for end of a transaction so we don't have TX_END's hanging
 // around
 #define TX_END_TRANSITION_TO(task) \
+    SET_TX_TRANS \
     TX_TIMER_STOP \
     curctx->commit_state = TX_PH1; \
     transition_to(TASK_REF(task))
 
+// Extra defs for instrumentation
+// These disable the transition timer so we can get accurate delay numbers
+#ifdef LIBCOATIGCC_TEST_TIMING
+#define NI_TX_END_TRANSITION_TO(task) \
+    SET_TX_TRANS \
+    TX_TIMER_STOP \
+    curctx->commit_state = TX_PH1; \
+    instrument = 0; \
+    transition_to(TASK_REF(task))
 
+#ifdef LIBCOATIGCC_BUFFER_ALL
+#define NI_TX_TRANSITION_TO(task) \
+      curctx->commit_state = TSK_IN_TX_PH1; \
+      instrument = 0; \
+      transition_to(TASK_REF(task))
+#else
+#define NI_TX_TRANSITION_TO(task) \
+      curctx->commit_state = TSK_PH1; \
+      instrument = 0; \
+      transition_to(TASK_REF(task))
+#endif // BUFFER_ALL
+
+#else
+#define NI_TX_END_TRANSITION_TO(task) \
+    SET_TX_TRANS \
+    TX_TIMER_STOP \
+    curctx->commit_state = TX_PH1; \
+    transition_to(TASK_REF(task))
+
+#ifdef LIBCOATIGCC_BUFFER_ALL
+#define NI_TX_TRANSITION_TO(task) \
+      curctx->commit_state = TSK_IN_TX_PH1; \
+      transition_to(TASK_REF(task))
+#else
+#define NI_TX_TRANSITION_TO(task) \
+      curctx->commit_state = TSK_PH1; \
+      transition_to(TASK_REF(task))
+#endif // BUFFER_ALL
+
+#endif // TEST_TIMING
 
 #ifdef LIBCOATIGCC_BUFFER_ALL
 // Place immediately after TX_BEGIN in the first task of a transaction where the
@@ -70,6 +112,26 @@ typedef struct _tx_state {
       write(&(x),sizeof(type),TX,_temp_loc);\
     }\
     RW_TIMER_STOP
+
+#ifdef LIBCOATIGCC_TEST_COUNT
+#define NI_TX_WRITE(x,val,type,is_ptr) \
+    { instrument = 0; \
+      type _temp_loc = val;\
+      write(&(x),sizeof(type),TX,_temp_loc);\
+    }
+
+#define NI_TX_READ(x,type) \
+      *((type *)read(&(x),sizeof(type),TX_NI))
+#else
+#define NI_TX_WRITE(x,val,type,is_ptr) \
+    { type _temp_loc = val;\
+      write(&(x),sizeof(type),TX,_temp_loc);\
+    }
+
+#define NI_TX_READ(x,type) \
+    *((type *)read(&(x),sizeof(type),TX))
+
+#endif
 
 extern tx_state state_1;
 extern tx_state state_0;
