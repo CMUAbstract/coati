@@ -271,8 +271,8 @@ void transition_to(task_t *task);
   printf("Events time: %u + %u\r\n",overflows_ev, ev_ticks);
 #elif defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_TEST_DEF_COUNT)
   #define APP_FINISHED \
-  #pragma message ("Either test_count or test_def_count defined!\r\n")
-  printf("Histogram:\r\n");\
+  #pragma message ("Either test_count or test_def_count defined!\r\n")\
+  printf("Histogram:\r\n"); \
   print_histogram();
 #endif
 
@@ -280,7 +280,7 @@ void transition_to(task_t *task);
 #pragma message ("initializing evtx monitoring!")
 #define TIMER_INIT \
   /*TA0CTL = TASSEL__MCLK | MC__STOP | ID_1 | TACLR | TAIE;*/ \
-  TA0EX0 |= 0x3; \
+  /*TA0EX0 |= 0x3;*/ \
   /*TA0CTL = TASSEL__ACLK | MC__STOP | ID_0 | TACLR | TAIE;*/ \
   TA0CTL = TASSEL__SMCLK | MC__STOP | ID_3 | TACLR | TAIE;
 #endif
@@ -294,19 +294,51 @@ void transition_to(task_t *task);
 #ifdef LIBCOATIGCC_TEST_TX_TIME
 #pragma message ("initializing tx start-stop!")
 #define TX_TIMER_START \
-  __delay_cycles(40000); \
-  /*printf("T:%u %u\r\n",overflows_tx,tx_ticks);*/\
-  tx_count++; \
-  TA0CTL |= MC__CONTINUOUS;
+  /*__delay_cycles(40000);*/ \
+  /*printf("T:%u %u\r\n",overflows_tx,tx_ticks);*/ \
+  if(!wait_count) { \
+    /*printf("Go! ");*/ \
+    /*P1OUT |= BIT0;\
+    P1DIR |= BIT0; */\
+    tx_count++; \
+    TA0CTL |= MC__CONTINUOUS; \
+  }
+
 // Pause the timer by setting the MC bits to 0
 #define MODE_SHIFT 4
+
 #define TX_TIMER_STOP \
-  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
+  /*printf("P T0:%u, %u + %u / 65536\r\n",wait_count,overflows_tx, TA0R);*/ \
+  if(!wait_count) { \
   TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  /*P1OUT &= ~BIT0;*/\
+  /*printf("%u!\r\n",TA0R);*/\
   add_ticks(&overflows_tx, &tx_ticks, TA0R);\
   /*printf("TX:%u %u\r\n",overflows_tx,tx_ticks);*/\
   TA0CTL |= TACLR; \
-  TA0R = 0; 
+  TA0R = 0;\
+  }
+
+// Define new WAIT_TIMER_START/STOP so we can customize the tx timer start/stop
+extern unsigned wait_count;
+extern unsigned pause;
+
+#define WAIT_TIMER_START \
+  if(!wait_count) { \
+    wait_count = 1; \
+    /*printf("start wait\r\n");*/\
+    /* pause, DONT' clear the TX_TIMER */ \
+    TA0CTL &= ~(0x3 << MODE_SHIFT); \
+    TA0CTL |= TACLR; \
+    TA0R = 0;\
+    pause = 1; \
+  }
+
+#define WAIT_TIMER_STOP \
+  wait_count = 0 ; \
+  if(pause) { \
+    TA0CTL |= MC__CONTINUOUS; \
+  }
 
 #else
 #define TX_TIMER_START \
@@ -354,8 +386,11 @@ void transition_to(task_t *task);
 // clear and then overwrite :) 
 #define TRANS_TIMER_START \
   if(instrument) { \
-  /*__delay_cycles(4000);*/ \
+  /*P1OUT |= BIT0;*/ \
+  /*P1DIR |= BIT0;*/ \
+  /*__delay_cycles(4000);*/\
   trans_starts++; \
+  /*printf("Start ");*/\
   /*printf("A %u %u\r\n",trans_starts,trans_stops);*/ \
   TA0CTL |= MC__CONTINUOUS;\
   } \
@@ -364,14 +399,17 @@ void transition_to(task_t *task);
 #define MODE_SHIFT 4
 #define TRANS_TIMER_STOP \
   if(instrument) { \
-  /*printf("stop\r\n");*/ \
   TA0CTL &= ~(0x3 << MODE_SHIFT); \
+  /*printf("stop\r\n"); */\
+  /*P1OUT &= ~BIT0; */\
   static unsigned *overflow_ptr_, *ticks_ptr_; \
   switch(cur_trans){ \
     case TSK_CMT: overflow_ptr_ = &overflows_tsk_tran; \
       ticks_ptr_ = &tsk_tran_ticks; break;\
     case TSK_IN_TX_CMT:overflow_ptr_ = &overflows_tsk_in_tx_tran; \
-      ticks_ptr_ = &tsk_in_tx_tran_ticks; break;\
+      /*P3OUT &= ~BIT7;*/ \
+      /*printf("%u\r\n",TA0R);*/ \
+      ticks_ptr_ = &tsk_in_tx_tran_ticks;break;\
     case EV_CMT:overflow_ptr_ = &overflows_ev_tran; \
       ticks_ptr_ = &ev_tran_ticks; break;\
     case TX_CMT:overflow_ptr_ = &overflows_tx_tran; \
@@ -389,13 +427,18 @@ void transition_to(task_t *task);
   //printf("X %u %u\r\n",trans_starts,trans_stops);
 
 #define SET_TSK_TRANS \
-  cur_trans = TSK_CMT;
+  cur_trans = TSK_CMT;\
+  //instrument = 0;
 #define SET_TSK_IN_TX_TRANS \
-  cur_trans = TSK_IN_TX_CMT;
+  /*printf("Go ");*/\
+  cur_trans = TSK_IN_TX_CMT;\
+  //instrument = 1;
 #define SET_EV_TRANS \
-  cur_trans = EV_CMT;
+  cur_trans = EV_CMT;\
+  //instrument = 0;
 #define SET_TX_TRANS \
-  cur_trans = TX_CMT;
+  cur_trans = TX_CMT;\
+  //instrument = 0;
 
 #define RW_TIMER_START \
     ;
@@ -434,7 +477,8 @@ void transition_to(task_t *task);
                 overflows_ev_tran,ev_tran_ticks);\
     printf("Time in tx-only transition = %u + %u\r\n", \
                 overflows_tx_tran,tx_tran_ticks);\
-    printf("total errors: %u\r\n",errors);
+    printf("total errors: %u\r\n",errors);\
+    printf("Total start stops: %u %u\r\n",trans_starts, trans_stops);
     /*printf("Time in transition = %u + %u /65536\t %u %u\r\n", \
                 overflows,transition_ticks,trans_starts, trans_stops);\*/
     /*printf("Time in writes and reads = %u + %u /65536\t %u %u\r\n",\
@@ -487,6 +531,8 @@ extern unsigned wait_count;
 #define WAIT_TIMER_START \
   /*printf("T %u\r\n",TA0R);*/ \
   if(!wait_count) {\
+    /*P3OUT |= BIT7; \
+    P3DIR |= BIT7;*/ \
     wait_count=1; \
     __delay_cycles(4000); \
     TA0CTL |= MC__CONTINUOUS;\
@@ -501,6 +547,7 @@ extern unsigned wait_count;
   /*printf("EV:%u %u\r\n",overflows_ev,ev_ticks);*/\
   TA0CTL |= TACLR; \
   TA0R = 0; \
+  /*P3OUT &= ~BIT7;*/ \
   wait_count = 0;
 
 #define APP_FINISHED \
@@ -508,13 +555,14 @@ extern unsigned wait_count;
 
 #else
 
+#ifndef LIBCOATIGCC_TEST_TX_TIME
 #define WAIT_TIMER_START \
   ;
 
 #define WAIT_TIMER_STOP \
   ;
-
-#endif
+#endif //TX_TIME
+#endif //WAIT_TIME
 
 /** @brief Transfer control to the given task
  *  @param task     Name of the task function
@@ -528,7 +576,8 @@ extern unsigned wait_count;
  * @brief extra transition for instrumentation purposes
  * @details This won't add to deferred update counts
  */
-#ifdef LIBCOATIGCC_TEST_DEF_COUNT
+#if defined(LIBCOATIGCC_TEST_DEF_COUNT) || \
+    defined(LIBCOATIGCC_TEST_TIMING)
 #define NI_TRANSITION_TO(task) \
     curctx->commit_state = TSK_PH1;\
     instrument = 0; \
@@ -538,7 +587,7 @@ extern unsigned wait_count;
     curctx->commit_state = TSK_PH1;\
     transition_to(TASK_REF(task))
 
-#endif
+#endif // DEF_COUNT
 
 #define TRANSITION_FIRST(task) transition_to(TASK_REF(task))
 

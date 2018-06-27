@@ -62,6 +62,8 @@ unsigned instrument = 1;
 unsigned overflows_tx = 0;
 unsigned tx_ticks = 0;
 unsigned tx_count = 0;
+unsigned wait_count = 0;
+unsigned pause = 0;
 #endif
 
 #ifdef LIBCOATIGCC_TEST_EV_TIME
@@ -842,7 +844,7 @@ void commit_phase2() {
  *  TODO: mark this function as bare (i.e. no prologue) for efficiency
  */
 void transition_to(task_t *next_task)
-{
+{ 
   // disable event interrupts so we don't have to deal with them during
   // transition
   _disable_events();
@@ -957,7 +959,6 @@ int main() {
     #ifdef LIBCOATIGCC_TEST_DEF_COUNT
     #pragma message ("Delaying for def test")
     //__delay_cycles(4000000);
-    //printf("TSK,EV,TX\r\n");
     #endif
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL
@@ -1034,7 +1035,7 @@ void __attribute__((interrupt(TIMER0_A1_VECTOR))) Timer0_A1_ISR(void) {
     overflows_ev++;
   #elif defined(LIBCOATIGCC_TEST_TX_TIME)
     overflows_tx++;
-    TA0EX0 |= 0x3; 
+    /*TA0EX0 |= 0x3; */
   #elif defined(LIBCOATIGCC_TEST_WAIT_TIME)
     overflows_wait++;
     //TA0EX0 |= 0x3; 

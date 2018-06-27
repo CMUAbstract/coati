@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <libmsp/mem.h>
+#include <msp430.h>
 
 #include "top_half.h"
 #include "coati.h"
@@ -26,6 +27,7 @@ uint8_t top_half_return (void *deferred_task) {
   //printf("Got %x\r\n",
   //     event_queue.tasks[((ev_state *)curctx->extra_ev_state)->count + 1]);
  ((ev_state *)curctx->extra_ev_state)->count++;
+  TRANS_TIMER_STOP;
   return 0;
 }
 

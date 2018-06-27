@@ -44,6 +44,7 @@ typedef struct _tx_state {
 #define TX_END_TRANSITION_TO(task) \
     SET_TX_TRANS \
     TX_TIMER_STOP \
+    /*printf("Tx end\r\n");*/ \
     curctx->commit_state = TX_PH1; \
     transition_to(TASK_REF(task))
 
