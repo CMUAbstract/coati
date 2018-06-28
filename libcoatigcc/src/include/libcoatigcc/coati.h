@@ -440,33 +440,7 @@ extern unsigned pause;
   cur_trans = TX_CMT;\
   //instrument = 0;
 
-#define RW_TIMER_START \
-    ;
-  /*printf("RW timer start\r\n");*/\
-  /*__delay_cycles(4000);\
-  rw_starts++; \
-  TA0CTL |= MC__CONTINUOUS;*/
 
-// Pause the timer by setting the MC bits to 0
-#define MODE_SHIFT 4
-#define RW_TIMER_STOP \
-    ;
-  /*printf("P T0: %u + %u / 65536\r\n",overflows, TA0R); */\
-  /*TA0CTL &= ~(0x3 << MODE_SHIFT); \
-  add_ticks(&overflows1, &rw_ticks, TA0R);\*/
-  /*printf("RW timer stop\r\n");*/\
-  /*printf("F R:%u %u\r\n",overflows1,rw_ticks);*/\
-  /*TA0CTL |= TACLR; \
-  TA0R = 0;\
-  rw_stops++;*/
-
-#define RW_TIMER_CLEANUP \
-    ;
-  /*if(rw_stops != rw_starts) \
-  { TA0CTL &= ~(0x3 << MODE_SHIFT); \
-    TA0CTL |= TACLR; \
-    TA0R = 0;\
-    rw_starts--;} \*/
 
 #define APP_FINISHED \
     printf("Time in tsk-only transition = %u + %u\r\n", \
@@ -489,12 +463,6 @@ extern unsigned pause;
 #define TRANS_TIMER_START \
   ;
 #define TRANS_TIMER_STOP \
-  ;
-#define RW_TIMER_START \
-  ;
-#define RW_TIMER_STOP \
-  ;
-#define RW_TIMER_CLEANUP \
   ;
 #define SET_TSK_TRANS \
   ;
@@ -605,10 +573,8 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
  * @brief writes a value to x based on the size of the variable
  */
 #define WRITE(x,val,type,is_ptr) \
-    { RW_TIMER_START \
-      type _temp_loc = val;\
+    { type _temp_loc = val;\
       write(&(x),sizeof(type),NORMAL,_temp_loc);\
-      RW_TIMER_STOP \
     }
 /**
  * @brief extra key words mostly for instrumentation

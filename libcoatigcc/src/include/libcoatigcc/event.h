@@ -83,10 +83,8 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 
 
 #define EV_WRITE(x,val,type,is_ptr) \
-    { RW_TIMER_START \
-          type _temp_loc = val;\
+    { type _temp_loc = val;\
           write(&(x),sizeof(type),EVENT,_temp_loc);\
-      RW_TIMER_STOP \
     }
 
 /*
