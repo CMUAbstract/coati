@@ -2,6 +2,7 @@
 #define _TOP_HALF_H
 #include "event.h"
 #include "coati.h"
+#include "tx.h"
 
 #ifndef LIBCOATIGCC_BUFFER_ALL
 
@@ -21,6 +22,9 @@ extern event_queue_t event_queue;
 
 uint8_t top_half_return(void *deferred_task);
 uint8_t top_half_start(void);
+void __task_sleep(void);
+
+extern task_t *__sleep_return_task;
 
 #define TH_WRITE(var, val) \
   _TH_PRIV_ ## var[((ev_state *)curctx->extra_ev_state)->count + 1] = val
@@ -63,5 +67,25 @@ uint8_t top_half_start(void);
 #define TOP_HALF_CHECK_START() \
   top_half_start()
 #endif // BUFFER_ALL
+
+#define SLEEP_THEN_GOTO(task) \
+  { __sleep_return_task = TASK_REF(task); \
+    TRANSITION_TO(__task_sleep); \
+  }
+
+#define TX_SLEEP_THEN_GOTO(task) \
+  { __sleep_return_task = TASK_REF(task); \
+    TX_END_TRANSITION_TO(__task_sleep); \
+  }
+
+#define SLEEP void __task_sleep ()
+
+#define SLEEP_RETURN \
+  curctx->commit_state = TSK_PH1; \
+  transition_to(__sleep_return_task)
+
+#define SLEEP_TASK(idx) \
+    void __task_sleep(); \
+    __nv task_t TASK_SYM_NAME(__task_sleep) = {__task_sleep, idx, "__task_sleep" }; \
 
 #endif /// _TOP_HALF_H
