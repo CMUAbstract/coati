@@ -108,11 +108,9 @@ typedef struct _tx_state {
 
 
 #define TX_WRITE(x, val,type,is_ptr) \
-    RW_TIMER_START \
     { type _temp_loc = val;\
       write(&(x),sizeof(type),TX,_temp_loc);\
     }\
-    RW_TIMER_STOP
 
 #ifdef LIBCOATIGCC_TEST_COUNT
 #define NI_TX_WRITE(x,val,type,is_ptr) \
