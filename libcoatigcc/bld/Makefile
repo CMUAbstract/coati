@@ -11,6 +11,7 @@ OBJECTS += \
   tx.o \
   filter.o\
   event.o \
+  hash.o \
 
 
 DEPS += \
