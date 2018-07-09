@@ -2,25 +2,11 @@
 #include <stdio.h>
 #include "hash.h"
 
-void *src[NUM_BINS][BIN_LEN] = {0};
-void *dst[NUM_BINS][BIN_LEN] = {0};
-size_t size[NUM_BINS][BIN_LEN] = {0};
-uint8_t lens[NUM_BINS] = {0};
-
 uint8_t dirty_buf[BUF_LEN];
 uint16_t buf_level = 0;
 
-/*table_t tsk_table = { &src[0][0],
-                      &dst[0][0],
-                      &size[0][0],
-                      &lens[0]
-                    };
-                    */
-table_t tsk_table = { src,
-                      dst,
-                      size,
-                      lens
-                    };
+table_t tsk_table;
+
 /*
  * @brief simple hash function XOR's the bottom byte with the top byte
  */
@@ -117,15 +103,42 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr, size_t size) {
  * size
  */
 uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
+  uint16_t new_ptr;
+  size_t extra = 0;
   if(*buf_cap + size > BUF_LEN) {
     return 0xFFFF;
   }
+  if(*buf_cap) {
+    new_ptr = (uint16_t) buf + *buf_cap;
+  }
+  else {
+    new_ptr = (uint16_t) buf;
+  }
+  // TODO make more general
+  // Fix alignment struggles
+  if(size == 2) {
+    while(new_ptr & 0x1) {
+      new_ptr++;
+      extra++;
+    }
+  }
+  if(size == 4) {
+    while(new_ptr & 0x11) {
+      new_ptr++;
+      extra++;
+    }
+  }
+  // If we're out of space, throw an error
+  if(new_ptr + size > (unsigned) (buf + BUF_LEN)) {
+      return NULL;
+  }
+
   // TODO confirm that this indexing works
   for(int i = 0; i < size; i++) {
     buf[*buf_cap + i] = *((uint8_t *)(addr + size - i - 1));
   }
   uint16_t loc = *buf_cap;
-  *buf_cap += size;
+  *buf_cap += size + extra;
   return loc;
 }
 
