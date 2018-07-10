@@ -7,6 +7,7 @@
 #include <libmsp/mem.h>
 #include "types.h"
 #include "repeat.h"
+#include "hash.h"
 
 #define TASK_NAME_SIZE 32
 
@@ -18,7 +19,7 @@
   #define NUM_DIRTY_ENTRIES LIBCOATIGCC_PER_TSK_BUF_SIZE
 #endif
 
-
+// TODO Add BUF_LEN definition here?
 #ifndef LIBCOATIGCC_CTX_BUF_SIZE
   #define BUF_SIZE 32
 #else
@@ -117,13 +118,9 @@ extern unsigned ev_ticks;
 extern unsigned ev_count;
 #endif
 
-extern void *tsk_src[];
-extern void *tsk_dst[];
-extern size_t tsk_size[];
+extern table_t tsk_table;
 extern uint8_t tsk_buf[];
-
-extern uint16_t volatile num_tbe;
-extern uint16_t num_dtv;
+extern uint16_t tsk_buf_level;
 
 extern volatile unsigned _numBoots;
 
@@ -559,9 +556,8 @@ extern unsigned wait_count;
 
 #define TRANSITION_FIRST(task) transition_to(TASK_REF(task))
 
-void * read(const void * addr, unsigned size, acc_type acc);
-void  write(const void *addr, unsigned size, acc_type acc, uint32_t value);
-void *internal_memcpy(void *dest, void *src, uint16_t num);
+void * read(const void * addr, size_t size, acc_type acc);
+void  write(const void *addr, size_t size, acc_type acc, void * value);
 
 /**
  *  @brief returns the value of x after finding it in dirty buf
@@ -574,7 +570,7 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
  */
 #define WRITE(x,val,type,is_ptr) \
     { type _temp_loc = val;\
-      write(&(x),sizeof(type),NORMAL,_temp_loc);\
+      write(&(x),sizeof(type),NORMAL,&_temp_loc);\
     }
 /**
  * @brief extra key words mostly for instrumentation
@@ -587,7 +583,7 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
 #define NI_WRITE(x,val,type,is_ptr) \
     { instrument = 0; \
       type _temp_loc = val;\
-      write(&(x),sizeof(type),NORMAL,_temp_loc);\
+      write(&(x),sizeof(type),NORMAL,&_temp_loc);\
     }
 
 #define NI_READ(x,type) \
@@ -595,7 +591,7 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
 #else
 #define NI_WRITE(x,val,type,is_ptr) \
     { type _temp_loc = val;\
-      write(&(x),sizeof(type),NORMAL,_temp_loc);\
+      write(&(x),sizeof(type),NORMAL,&_temp_loc);\
     }
 
 #define NI_READ(x,type) \

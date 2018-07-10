@@ -15,7 +15,7 @@ uint16_t hash(void * address) {
 }
 
 /*
- * @brief returns an index into the buffer if a value is in the table or an
+ * @brief returns a pointer into the buffer if a value is in the table or an
  * error code (0xFFFF) if not
  */
 uint16_t check_table(table_t *table,void * addr) {
@@ -40,7 +40,8 @@ uint16_t check_table(table_t *table,void * addr) {
  * @ars pointer to table, pointer to table capacity, address to locate size of
  * var
  */
-uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr, size_t size) {
+uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr,
+                                     void * value,  size_t size) {
   uint16_t bucket;
   // Calc hash of address
   bucket = hash(addr);
@@ -49,8 +50,10 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr, size_t size) {
   // Optimization for empty buckets
   if(table->bucket_len[bucket]) {
     int i = 0;
+    uint16_t temp;
     for(i = 0; i < table->bucket_len[bucket]; i++) {
       if(table->src[bucket][i] == addr) {
+        memcpy(table->dst[bucket][i], value, size);
         break;
       }
     }
@@ -62,12 +65,11 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr, size_t size) {
       }
       (table->src[bucket][i]) = addr;
       table->size[bucket][i] = size;
-      printf("Setting src %x --> %x with size %u\r\n",
+      printf("Setting src %x --> %x with size %u, val %u\r\n",
                                         (uint16_t)addr,
                                         ((uint16_t) (table->src[bucket][i])),
-                                        table->size[bucket][i]);
-      // TODO add check
-      uint16_t temp;
+                                        table->size[bucket][i],
+                                        *((uint16_t *)addr));
       temp = alloc(dirty_buf, cap, addr, size);
       if(temp == 0xFFFF) {
         printf("Alloc failed!\r\n");
@@ -75,15 +77,18 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr, size_t size) {
       }
       table->dst[bucket][i] = dirty_buf + temp;
       table->bucket_len[bucket]++;
+      memcpy(dirty_buf + temp, value, size);
+      printf("New val: %u\r\n",*((uint16_t *)(dirty_buf + temp)));
     }
   }
   else {
     (table->src[bucket][0]) = addr;
     table->size[bucket][0] = size;
-    printf("Setting src %x --> %x with size %u\r\n",
+    printf("Setting src %x --> %x with size %u, val %u\r\n",
                                 (uint16_t)addr,
                                 ((uint16_t) (table->src[bucket][0])),
-                                table->size[bucket][0]);
+                                table->size[bucket][0],
+                                *((uint16_t *)addr));
     uint16_t temp;
     temp = alloc(dirty_buf, cap, addr, size);
     if(temp == 0xFFFF) {
@@ -92,6 +97,8 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr, size_t size) {
     }
     table->dst[bucket][0] = dirty_buf + temp;
     table->bucket_len[bucket]++;
+    memcpy(dirty_buf + temp, value, size);
+    printf("New val: %u\r\n",*((uint16_t *)(dirty_buf + temp)));
   }
   printf("final bucket len = %u\r\n",table->bucket_len[bucket]);
   return 0;
@@ -133,7 +140,6 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
       return NULL;
   }
 
-  // TODO confirm that this indexing works
   for(int i = 0; i < size; i++) {
     buf[*buf_cap + i] = *((uint8_t *)(addr + size - i - 1));
   }
@@ -152,4 +158,81 @@ void clear_table(table_t *table) {
   }
   return;
 }
+
+/*
+ * @brief Searches the table for an address and returns a pointer to the
+ * object's location in the dirty buffer if it's there.
+ * @details lacks the extra functionality of the read in coati.c, this one
+ * doesn't have event/tx/tsk read, this is just for tasks and just a simple
+ * wrapper for check_table
+ */
+void * new_read(void *addr, size_t size, table_t *table) {
+  // First check if value is in table
+  uint16_t flag;
+  flag = check_table(table, addr);
+  // If value is not in the table, return the main memory location
+  if(flag == 0xFFFF) {
+    return addr;
+  }
+  else {
+    return flag;
+  }
+}
+
+/*
+ * @brief function to add an address to a basic src table structure
+ */
+uint16_t add_to_src_table(src_table *table, void *addr) {
+  uint16_t bucket;
+  // Calc hash of address
+  bucket = hash(addr);
+  bucket &= BIN_MASK;
+  printf("Bucket = %u\r\n",bucket);
+  int i = 0;
+  while(i < table->bucket_len[bucket]) {
+    if(table->src[bucket][i] == addr) {
+      break;
+    }
+    i++;
+  }
+  // add to bucket if not present
+  if(i + 1 > BIN_LEN) {
+    printf("Error! overflowed bin!\r\n");
+    return 1;
+  }
+  (table->src[bucket][i]) = addr;
+  table->bucket_len[bucket]++;
+  printf("final bucket len = %u\r\n",table->bucket_len[bucket]);
+  return 0;
+}
+
+/*
+ * @brief function to compare the contents of two src tables returns 1 if there
+ * is a conflict(any overlapping values), 0 otherwise
+ */
+uint8_t compare_src_tables(src_table *table1, src_table *table2) {
+  while(table1->active_bins > 0) {
+    uint16_t bin;
+    bin = table1->active_bins;
+    uint16_t slot1;
+    slot1 = table1->bucket_len[bin];
+    while(slot1 > 0) {
+      slot1 = table1->bucket_len[bin];
+      uint16_t slot2;
+      slot2 = table1->bucket_len[bin];
+      while(slot2 > 0) {
+        if(table1->src[bin][slot1] == table2->src[bin][slot2]) {
+          return 1;
+        }
+        slot2--;
+      }
+      slot1--;
+    }
+    table1->active_bins--;
+  }
+  return 0;
+}
+
+
+
 
