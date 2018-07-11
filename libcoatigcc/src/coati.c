@@ -117,13 +117,6 @@ static void tsk_commit_ph2(void);
 void tsk_commit_ph2() {
   // Copy all commit list entries
   LCG_PRINTF("In tsk commit\r\n");
-  // TODO take this print loop out:
-  for(int i = 0; i < NUM_BINS; i++) {
-    if((i & 0x7) == 0) {
-      LCG_PRINTF("\r\n");
-    }
-    LCG_PRINTF("%u ", tsk_table.bucket_len[i]);
-  }
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
@@ -142,18 +135,12 @@ void tsk_commit_ph2() {
                                 *((uint16_t *)tsk_table.src[bin][slot]));
       // Decrement number of items in bin
       tsk_table.bucket_len[bin]--;
+      LCG_PRINTF("tsk_comm buf level:%u\r\n",tsk_buf_level);
     }
     // Decrement number of bins left to check
     tsk_table.active_bins--;
   }
   tsk_buf_level = 0;
-  // TODO take this print loop out:
-  for(int i = 0; i < NUM_BINS; i++) {
-    if((i & 0x7) == 0) {
-      LCG_PRINTF("\r\n");
-    }
-    LCG_PRINTF("%u ", tsk_table.bucket_len[i]);
-  }
 }
 
 /*
@@ -177,7 +164,6 @@ void * read(const void *addr, size_t size, acc_type acc) {
     uint16_t flag;
     uint16_t test = 0;
     void * dst;
-    uint16_t read_cnt;
     switch(acc) {
         case EVENT:
             // Only add to read list if we're buffering all updates
@@ -270,6 +256,8 @@ void * read(const void *addr, size_t size, acc_type acc) {
       instrument = 1;
     }
     #endif // TEST_COUNT
+    LCG_PRINTF("TBR:%u ev:%u %u %u",tsk_buf_level, events_noted, _numEvents_missed,
+                                  ((ev_state *)curctx->extra_ev_state)->count);
     return dst;
 }
 
@@ -292,9 +280,7 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
         w_tsk_counts++;
       }
     #endif
-    uint16_t flag;
     uint16_t test = 0;
-    uint16_t write_cnt;
     //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
     switch(acc) {
         case EVENT:
@@ -304,12 +290,14 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
             test = add_to_src_table(&ev_write_table, addr);
             if(test) {
               printf("Error adding to ev_write_table!\r\n");
+              while(1);
             }
             #endif // SER_TX_AFTER
             #endif //BUFFER_ALL
             test = add_to_table(&ev_table, ev_buf, &ev_buf_level, addr, value, size);
             if(test) {
               printf("Error writing to ev buffer\r\n");
+              while(1);
             }
             break;
         case TX:
@@ -318,6 +306,7 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
             test = add_to_src_table(&tx_write_table, addr);
             if(test) {
               printf("Error adding to tx_write_table!\r\n");
+              while(1);
             }
             #endif // SER_TX_AFTER
             #endif // BUFFER_ALL
@@ -325,7 +314,11 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
         case NORMAL:
             test = add_to_table(&tsk_table, tsk_buf, &tsk_buf_level, addr, value, size);
             if(test) {
-              printf("Error writing to ev buffer\r\n");
+              printf("Error writing to tsk buffer\r\n");
+              P3OUT |= BIT7;
+              P3DIR |= BIT7;
+              P3OUT &= ~BIT7;
+              while(1);
             }
             break;
         default:
@@ -342,6 +335,8 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
       instrument = 1;
     }
     #endif // TEST_COUNT
+    LCG_PRINTF("TBW:%u ev:%u %u %u ",tsk_buf_level, events_noted, _numEvents_missed,
+                                ((ev_state *)curctx->extra_ev_state)->count);
     return;
 }
 
@@ -387,6 +382,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
 
     case EV_PH1:
       // TODO did this latch the updates from last time?
+      ev_table.active_bins = NUM_BINS;
       #ifdef LIBCOATIGCC_BUFFER_ALL
       new_ev->in_ev = 0;
       // Drop in transaction state from interrupted thread
@@ -480,6 +476,11 @@ void commit_phase2() {
         break;
       case EV_FUTURE:
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
+        // Now clean out task buffers since we're returning
+        for(int i = 0; i <  NUM_BINS; i++) {
+          tsk_buf.bucket_len[i] = 0;
+        }
+        tsk_buf_level = 0;
         curctx->commit_state = NO_COMMIT;
         break;
       #endif // BUFFER_ALL
@@ -551,8 +552,13 @@ void commit_phase2() {
           instrument = 1;
           //printf("0,%u,0\r\n",item_count);
         }
-        #endif
-        #else
+        #endif// TEST_DEF_COUNT
+        // Need to clear tsk_buf since we're restarting the interrupted task
+        for(int i = 0; i < NUM_BINS; i++) {
+          tsk_table.bucket_len[i] = 0;
+        }
+        tsk_buf_level = 0;
+        #else // BUFFER_ALL
         #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           #error "TEST_DEF_COUNT broken"
         item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
@@ -652,11 +658,11 @@ void transition_to(task_t *next_task)
                     &state_ev_0);
   }
   #else
-    next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
-    new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
+  next_ctx = (curctx == &context_0 ? &context_1 : &context_0);
+  new_tx_state = (curctx->extra_state == &state_0 ? &state_1 : &state_0);
 
-    new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
-                    &state_ev_0);
+  new_ev_state = (curctx->extra_ev_state == &state_ev_0 ? &state_ev_1 :
+                  &state_ev_0);
   #endif // BUFFER_ALL
 
   // Set the next task here so we don't overwrite modifications from commit_phase1
@@ -696,22 +702,23 @@ void transition_to(task_t *next_task)
   // a check that we're in an event.
   // enable events (or don't because we're in an atomic region) now that
   // commit_phase2 is done
-    #if defined(LIBCOATIGCC_ATOMICS) && defined(LIBCOATIGCC_ATOMICS_HW)
-    if(curctx->task->atomic == 0) {
-      LCG_PRINTF("not atomic\r\n");
-      TRANS_TIMER_STOP
-      _enable_events();
-    }
-    else {
-      LCG_PRINTF("atomic\r\n");
-      TRANS_TIMER_STOP
-      _disable_events();
-    }
-  #else
+  #if defined(LIBCOATIGCC_ATOMICS) && defined(LIBCOATIGCC_ATOMICS_HW)
+  if(curctx->task->atomic == 0) {
+    LCG_PRINTF("not atomic\r\n");
     TRANS_TIMER_STOP
     _enable_events();
+  }
+  else {
+    LCG_PRINTF("atomic\r\n");
+    TRANS_TIMER_STOP
+    _disable_events();
+  }
+  #else
+  TRANS_TIMER_STOP
+  _enable_events();
   #endif
-  //}
+  LCG_PRINTF("Buf levels: %u %u\r\n", tsk_buf_level, ev_buf_level);
+  // Now transition off ot the next task
   __asm__ volatile ( // volatile because output operands unused by C
       "mov #0x2400, r1\n"
       "br %[ntask]\n"
@@ -733,7 +740,6 @@ int main() {
     #ifdef LIBCOATIGCC_ENABLE_DIAGNOSTICS
     __delay_cycles(4000000);
     #endif
-    printf("Here!\r\n");
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL

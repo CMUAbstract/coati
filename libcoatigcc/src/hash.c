@@ -66,7 +66,6 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
   if(i == table->bucket_len[bucket]) {
     if(i + 1 > BIN_LEN) {
       printf("Error! overflowed bin!\r\n");
-      while(1);
       return 1;
     }
     (table->src[bucket][i]) = addr;
@@ -78,8 +77,7 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
                                       (uint16_t)addr);
     temp = alloc(dirty_buf, cap, addr, size);
     if(temp == 0xFFFF) {
-      printf("Alloc failed!\r\n");
-      while(1);
+      printf("Alloc failed! buf_level = %u\r\n",*cap);
       return 1;
     }
     table->dst[bucket][i] = dirty_buf + temp;
@@ -89,6 +87,7 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
     LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
   }
   LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
+  LCG_PRINTF("New level = %u\r\n",*cap);
   return 0;
 }
 
@@ -101,6 +100,7 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
   uint16_t new_ptr;
   size_t extra = 0;
   if(*buf_cap + size > BUF_LEN) {
+    printf("Maxed len %u + %u > %u\r\n",*buf_cap, size, BUF_LEN);
     return 0xFFFF;
   }
   if(*buf_cap) {
@@ -116,10 +116,6 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
       new_ptr++;
       extra++;
     }
-    // TODO get rid of this line
-    if(extra) {
-      LCG_PRINTF("Beefing up! %u\r\n", extra);
-    }
   }
   if(size == 4) {
     while(new_ptr & 0x11) {
@@ -129,7 +125,7 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
   }
   // If we're out of space, throw an error
   if(new_ptr + size > (unsigned) (buf + BUF_LEN)) {
-      return NULL;
+      return 0xFFFF;
   }
   /*
   // This is potentially how the memcpy should be happening, I'm just also
@@ -169,7 +165,7 @@ void * new_read(void *addr, size_t size, table_t *table) {
     return addr;
   }
   else {
-    return flag;
+    return (void *)flag;
   }
 }
 
@@ -192,7 +188,6 @@ uint16_t add_to_src_table(src_table *table, void *addr) {
   // add to bucket if not present
   if(i + 1 > BIN_LEN) {
     printf("Error! overflowed bin!\r\n");
-    while(1);
     return 1;
   }
   (table->src[bucket][i]) = addr;

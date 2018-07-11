@@ -10,6 +10,8 @@
 #define EV  1
 #define NUM_PRIO_LEVELS 2
 
+extern uint16_t events_noted;
+
 typedef struct _ev_state {
     uint8_t in_ev;
 #ifdef LIBCOATIGCC_BUFFER_ALL

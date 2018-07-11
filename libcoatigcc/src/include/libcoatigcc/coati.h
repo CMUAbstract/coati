@@ -11,6 +11,8 @@
 
 #define TASK_NAME_SIZE 32
 
+extern unsigned _numEvents_missed;
+
 #ifndef LIBCOATIGCC_PER_TSK_BUF_SIZE
   #pragma message "PER TSK_BUF UNDEF"
   #define NUM_DIRTY_ENTRIES 16

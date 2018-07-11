@@ -126,9 +126,9 @@ void tx_begin();
 
 #ifdef LIBCOATIGCC_BUFFER_ALL
 
-extern __nv table_t tx_table;
-extern __nv uint8_t tx_buf[];
-extern __nv uint16_t tx_buf_level;
+extern table_t tx_table;
+extern uint8_t tx_buf[];
+extern uint16_t tx_buf_level;
 
 #ifdef LIBCOATIGCC_SER_TX_AFTER
 extern src_table tx_read_table;

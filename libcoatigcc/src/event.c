@@ -16,6 +16,7 @@
 #define LCG_PRINTF printf
 #endif
 
+uint16_t events_noted = 0;
 __nv uint8_t ev_buf[BUF_SIZE];
 __nv uint16_t ev_buf_level = 0;
 __nv table_t ev_table = {.bucket_len = {0}, .active_bins = 0};
@@ -138,16 +139,18 @@ void queued_event_handoff(void) {
   // Transfer in tx value
   new_tx_state->in_tx = ((tx_state *)curctx->extra_state)->in_tx;
   // TODO remove this check once we confirm that the lengths are always 0
+  /*
   if(ev_buf_level) {
     printf("Error! buf level isn't 0");
     while(1);
   }
   for(int i = 0; i < NUM_BINS; i++) {
-    if(ev_table.bucket_len[i] == 0) {
-      printf("Error! bucket len isn't 0");
+    if(ev_table.bucket_len[i] != 0) {
+      printf("Error! bucket len isn't 0, it's %u in bucket %u", 
+                                              ev_table.bucket_len[i], i);
       while(1);
     }
-  }
+  }*/
   new_ev_state->in_ev = 1;
   next_ctx->extra_ev_state = new_ev_state;
   next_ctx->commit_state = NO_COMMIT;
@@ -199,6 +202,7 @@ void ev_commit_ph2() {
     // Decrement number of bins left to check
     ev_table.active_bins--;
   }
+  ev_buf_level = 0;
   #ifdef LIBCOATIGCC_BUFFER_ALL
   for(int i = 0; i < NUM_BINS; i++) {
     tsk_table.bucket_len[i] = 0;
