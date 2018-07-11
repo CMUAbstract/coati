@@ -183,11 +183,11 @@ void queued_event_handoff(void) {
 void ev_commit_ph2() {
   // Copy all commit list entries
   while(ev_table.active_bins > 0)  {
-    uint16_t bin = ev_table.active_bins;
+    uint16_t bin = ev_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
     while(ev_table.bucket_len[bin] > 0) {
-      slot = ev_table.bucket_len[bin];
+      slot = ev_table.bucket_len[bin] - 1;
       // Copy from dst in ev buf to "home" for that variable
       memcpy( ev_table.src[bin][slot],
               ev_table.dst[bin][slot],

@@ -2,6 +2,13 @@
 #include <stdio.h>
 #include "hash.h"
 
+#ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
+#define LCG_PRINTF(...)
+#else
+#include <stdio.h>
+#define LCG_PRINTF printf
+#endif
+
 uint8_t dirty_buf[BUF_LEN];
 uint16_t buf_level = 0;
 
@@ -26,7 +33,7 @@ uint16_t check_table(table_t *table,void * addr) {
   if(table->bucket_len[bucket]) {
     for(int i = 0; i < table->bucket_len[bucket]; i++) {
       if(table->src[bucket][i] == addr) {
-        printf("Found it!\r\n");
+        LCG_PRINTF("Found it!\r\n");
         return table->dst[bucket][i];
       }
     }
@@ -46,7 +53,7 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr,
   // Calc hash of address
   bucket = hash(addr);
   bucket &= BIN_MASK;
-  printf("Bucket = %u\r\n",bucket);
+  LCG_PRINTF("Bucket = %u\r\n",bucket);
   // Optimization for empty buckets
   if(table->bucket_len[bucket]) {
     int i = 0;
@@ -61,46 +68,50 @@ uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr,
     if(i == table->bucket_len[bucket]) {
       if(i + 1 > BIN_LEN) {
         printf("Error! overflowed bin!\r\n");
+        while(1);
         return 1;
       }
       (table->src[bucket][i]) = addr;
       table->size[bucket][i] = size;
-      printf("Setting src %x --> %x with size %u, val %u\r\n",
-                                        (uint16_t)addr,
+      LCG_PRINTF("Setting stuff val %x --> %x with size %u,addr %x\r\n",
+                                        *((uint16_t *)value),
                                         ((uint16_t) (table->src[bucket][i])),
                                         table->size[bucket][i],
-                                        *((uint16_t *)addr));
+                                        (uint16_t)addr);
       temp = alloc(dirty_buf, cap, addr, size);
       if(temp == 0xFFFF) {
         printf("Alloc failed!\r\n");
+        while(1);
         return 1;
       }
       table->dst[bucket][i] = dirty_buf + temp;
       table->bucket_len[bucket]++;
       memcpy(dirty_buf + temp, value, size);
-      printf("New val: %u\r\n",*((uint16_t *)(dirty_buf + temp)));
+      LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
     }
   }
   else {
     (table->src[bucket][0]) = addr;
     table->size[bucket][0] = size;
-    printf("Setting src %x --> %x with size %u, val %u\r\n",
-                                (uint16_t)addr,
+    LCG_PRINTF("Setting stuff val %u --> %x with size %u, addr %x\r\n",
+                                *((uint16_t*)value),
                                 ((uint16_t) (table->src[bucket][0])),
                                 table->size[bucket][0],
-                                *((uint16_t *)addr));
+                                ((uint16_t )addr));
     uint16_t temp;
     temp = alloc(dirty_buf, cap, addr, size);
     if(temp == 0xFFFF) {
       printf("Alloc failed!\r\n");
+      while(1);
       return 1;
     }
     table->dst[bucket][0] = dirty_buf + temp;
     table->bucket_len[bucket]++;
     memcpy(dirty_buf + temp, value, size);
-    printf("New val: %u\r\n",*((uint16_t *)(dirty_buf + temp)));
+    LCG_PRINTF("New val: %u or %u\r\n",*(uint16_t *)(dirty_buf + temp),
+                              *((uint16_t *)(table->dst[bucket][0])));
   }
-  printf("final bucket len = %u\r\n",table->bucket_len[bucket]);
+  LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
   return 0;
 }
 
@@ -187,7 +198,7 @@ uint16_t add_to_src_table(src_table *table, void *addr) {
   // Calc hash of address
   bucket = hash(addr);
   bucket &= BIN_MASK;
-  printf("Bucket = %u\r\n",bucket);
+  LCG_PRINTF("Bucket = %u\r\n",bucket);
   int i = 0;
   while(i < table->bucket_len[bucket]) {
     if(table->src[bucket][i] == addr) {
@@ -198,11 +209,12 @@ uint16_t add_to_src_table(src_table *table, void *addr) {
   // add to bucket if not present
   if(i + 1 > BIN_LEN) {
     printf("Error! overflowed bin!\r\n");
+    while(1);
     return 1;
   }
   (table->src[bucket][i]) = addr;
   table->bucket_len[bucket]++;
-  printf("final bucket len = %u\r\n",table->bucket_len[bucket]);
+  LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
   return 0;
 }
 

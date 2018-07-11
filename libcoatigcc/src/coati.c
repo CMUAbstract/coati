@@ -116,17 +116,30 @@ static void tsk_commit_ph2(void);
  */
 void tsk_commit_ph2() {
   // Copy all commit list entries
+  LCG_PRINTF("In tsk commit\r\n");
+  // TODO take this print loop out:
+  for(int i = 0; i < NUM_BINS; i++) {
+    if((i & 0x7) == 0) {
+      LCG_PRINTF("\r\n");
+    }
+    LCG_PRINTF("%u ", tsk_table.bucket_len[i]);
+  }
   while(tsk_table.active_bins > 0)  {
-    uint16_t bin = tsk_table.active_bins;
+    uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
     while(tsk_table.bucket_len[bin] > 0) {
-      slot = tsk_table.bucket_len[bin];
+      slot = tsk_table.bucket_len[bin] - 1;
+      LCG_PRINTF("Bucket %u slot %u\r\n",bin, slot);
       // Copy from dst in tsk buf to "home" for that variable
       memcpy( tsk_table.src[bin][slot],
               tsk_table.dst[bin][slot],
               tsk_table.size[bin][slot]
             );
+      LCG_PRINTF("Inserted %x to %x val = %u\r\n",
+                                *((uint16_t *)tsk_table.dst[bin][slot]),
+                                (uint16_t)tsk_table.src[bin][slot], 
+                                *((uint16_t *)tsk_table.src[bin][slot]));
       // Decrement number of items in bin
       tsk_table.bucket_len[bin]--;
     }
@@ -134,6 +147,13 @@ void tsk_commit_ph2() {
     tsk_table.active_bins--;
   }
   tsk_buf_level = 0;
+  // TODO take this print loop out:
+  for(int i = 0; i < NUM_BINS; i++) {
+    if((i & 0x7) == 0) {
+      LCG_PRINTF("\r\n");
+    }
+    LCG_PRINTF("%u ", tsk_table.bucket_len[i]);
+  }
 }
 
 /*
@@ -240,7 +260,7 @@ void * read(const void *addr, size_t size, acc_type acc) {
             // Error!
             while(1);
     }
-    LCG_PRINTF("Reading from %x \r\n",dst);
+    LCG_PRINTF("Reading %x from %x \r\n",addr, dst);
     #ifdef LIBCOATIGCC_TEST_COUNT
     // printf("\r\n%s: %u\r\n",curctx->task->name, access_len);
     if(instrument) {
@@ -419,177 +439,179 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
  * into consideration
  */
 void commit_phase2() {
-    while(curctx->commit_state != NO_COMMIT) {
-      switch(curctx->commit_state) {
-        case TSK_COMMIT:
-          #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-            #error "TEST_DEF_COUNT broken"
-          if(instrument)
-            add_to_histogram(num_dtv);
-          else
-            instrument = 1;
-          #endif
-          tsk_commit_ph2();
+  LCG_PRINTF("Phase2 state = %u\r\n",curctx->commit_state);
+  while(curctx->commit_state != NO_COMMIT) {
+    switch(curctx->commit_state) {
+      case TSK_COMMIT:
+        #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+          #error "TEST_DEF_COUNT broken"
+        if(instrument)
+          add_to_histogram(num_dtv);
+        else
+          instrument = 1;
+        #endif
+        tsk_commit_ph2();
 
-          #ifdef LIBCOATIGCC_BUFFER_ALL
-          curctx->commit_state = NO_COMMIT;
-          #else
-          if(((tx_state *)curctx->extra_state)->in_tx == 0) {
-            LCG_PRINTF("Checking queue!\r\n");
-            if(((ev_state *)curctx->extra_ev_state)->count > 0) {
-              LCG_PRINTF("To the queue!\r\n");
-              queued_event_handoff();
-            }
-          }
-          curctx->commit_state = NO_COMMIT;
-          #endif // BUFFER_ALL
-          break;
         #ifdef LIBCOATIGCC_BUFFER_ALL
-        case TSK_IN_TX_COMMIT:
-          #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-            #error "TEST_DEF_COUNT broken"
-          if(instrument)
-            add_to_histogram(num_dtv);
-          else
-            instrument = 1;
-          #endif
-          tsk_in_tx_commit_ph2();
-          curctx->commit_state = NO_COMMIT;
-          break;
-        case EV_FUTURE:
-          ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
-          curctx->commit_state = NO_COMMIT;
-          break;
-        #endif // BUFFER_ALL
-        case TX_COMMIT:
-          #ifdef LIBCOATIGCC_BUFFER_ALL
-          #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-            #error "TEST_DEF_COUNT broken"
-          item_count = ((ev_state *)curctx->extra_ev_state)->num_devv + num_dtv
-                      + ((tx_state *)curctx->extra_state)->num_dtxv;
-          if(!((tx_state *)curctx->extra_state)->in_tx) {
-            //printf("0,0,%u\r\n",item_count);
-          if(instrument)
-            add_to_histogram(item_count);
-          else
-            instrument = 1;
-          }
-
-          #endif
-          // Finish committing current tsk
-          tsk_in_tx_commit_ph2();
-          // Changes commit_state to any one of the following
-          tx_commit_ph1_5();
-          #else
-          #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-            #error "TEST_DEF_COUNT broken"
-          item_count = num_dtv;
-          if(instrument)
-            add_to_histogram(item_count);
-          else
-            instrument = 1;
-          }
-          //printf("0,0,%u\r\n",item_count);
-          #endif
-          // Commit last task
-          tsk_commit_ph2();
-          // Add new function for running outstanding events here
-          // Clear all task buf entries before starting new task
+        curctx->commit_state = NO_COMMIT;
+        #else
+        if(((tx_state *)curctx->extra_state)->in_tx == 0) {
+          LCG_PRINTF("Checking queue!\r\n");
           if(((ev_state *)curctx->extra_ev_state)->count > 0) {
+            LCG_PRINTF("To the queue!\r\n");
             queued_event_handoff();
           }
-          curctx->commit_state = NO_COMMIT;
-          #endif
-          break;
-        case TX_ONLY:
-          #ifdef LIBCOATIGCC_BUFFER_ALL
-          // Clear ev buffers
-          ((ev_state *)curctx->extra_ev_state)->perm_buf_level = 0;
-          for(int i = 0; i < NUM_BINS; i++) {
-            ((ev_state *)curctx->extra_ev_state)->perm_sizes[i] = 0;
-          }
-          for(int i = 0; i < NUM_BINS; i++) {
-            ((ev_state *)curctx->extra_ev_state)->src_sizes[i] = 0;
-          }
-          tx_commit_ph2();
-          #else
-          // Add new function for handling end of a tx
-          #endif
-          curctx->commit_state = NO_COMMIT;
-          break;
-        case EV_ONLY:
-          #ifdef LIBCOATIGCC_BUFFER_ALL
-          #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-            #error "TEST_DEF_COUNT broken"
-          if(((tx_state *)curctx->extra_state)->in_tx == 0) {
-            item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
-          if(instrument)
-            add_to_histogram(item_count);
-          else
-            instrument = 1;
-            //printf("0,%u,0\r\n",item_count);
-          }
-          #endif
-          #else
-          #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-            #error "TEST_DEF_COUNT broken"
-          item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
-          if(instrument)
-            add_to_histogram(item_count);
-          else
-            instrument = 1;
-          #endif
-          #endif //BUFFER_ALL
-          ev_commit_ph2();
-          curctx->commit_state = NO_COMMIT;
-          break;
-        #ifdef LIBCOATIGCC_BUFFER_ALL
-        case TX_EV_COMMIT:
-          tx_commit_ph2();
-          ev_commit_ph2();
-          curctx->commit_state = NO_COMMIT;
-          break;
-        case EV_TX_COMMIT:
-          ev_commit_ph2();
-          tx_commit_ph2();
-          curctx->commit_state = NO_COMMIT;
-          break;
+          LCG_PRINTF("Empty queue!\r\n");
+        }
+        curctx->commit_state = NO_COMMIT;
         #endif // BUFFER_ALL
-        // Catch here if we didn't finish phase 1
-        case EV_PH1:
-        #ifndef LIBCOATIGCC_BUFFER_ALL
-        // If we're running split phase, wipe the ev bins to 0 and restart the
-        // deferred event
-          for(int i = 0; i < NUM_BINS; i++) {
-            ev_table.bucket_len[i] = 0;
-          }
-          ev_buf_level = 0;
-          curctx->commit_state = NO_COMMIT;
-        #else
-        // If we're in fully buffered we should never end up in here since fully
-        // bufferd handles in_ev cases earlier.
-          printf("Error! In EV_PH1 commit_phase2 after reboot!\r\n");
-          while(1);
+        break;
+      #ifdef LIBCOATIGCC_BUFFER_ALL
+      case TSK_IN_TX_COMMIT:
+        #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+          #error "TEST_DEF_COUNT broken"
+        if(instrument)
+          add_to_histogram(num_dtv);
+        else
+          instrument = 1;
         #endif
-          break;
-        // For TSK, TX, TSK_IN_TX, wipe the bins and start the task again
-        case TSK_PH1:
-        case TX_PH1:
-        case TSK_IN_TX_PH1:
-          for(int i = 0; i < NUM_BINS; i++) {
-            tsk_table.bucket_len[i] = 0;
-          }
-          tsk_buf_level = 0;
-          curctx->commit_state = NO_COMMIT;
-          break;
-          curctx->commit_state = NO_COMMIT;
-          break;
-        default:
-          printf("Error! incorrect phase2 commit value: %x\r\n",
-                                                  curctx->commit_state);
-          while(1);
-      }
+        tsk_in_tx_commit_ph2();
+        curctx->commit_state = NO_COMMIT;
+        break;
+      case EV_FUTURE:
+        ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
+        curctx->commit_state = NO_COMMIT;
+        break;
+      #endif // BUFFER_ALL
+      case TX_COMMIT:
+        #ifdef LIBCOATIGCC_BUFFER_ALL
+        #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+          #error "TEST_DEF_COUNT broken"
+        item_count = ((ev_state *)curctx->extra_ev_state)->num_devv + num_dtv
+                    + ((tx_state *)curctx->extra_state)->num_dtxv;
+        if(!((tx_state *)curctx->extra_state)->in_tx) {
+          //printf("0,0,%u\r\n",item_count);
+        if(instrument)
+          add_to_histogram(item_count);
+        else
+          instrument = 1;
+        }
+
+        #endif
+        // Finish committing current tsk
+        tsk_in_tx_commit_ph2();
+        // Changes commit_state to any one of the following
+        tx_commit_ph1_5();
+        #else
+        #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+          #error "TEST_DEF_COUNT broken"
+        item_count = num_dtv;
+        if(instrument)
+          add_to_histogram(item_count);
+        else
+          instrument = 1;
+        }
+        //printf("0,0,%u\r\n",item_count);
+        #endif
+        // Commit last task
+        tsk_commit_ph2();
+        // Add new function for running outstanding events here
+        // Clear all task buf entries before starting new task
+        if(((ev_state *)curctx->extra_ev_state)->count > 0) {
+          queued_event_handoff();
+        }
+        curctx->commit_state = NO_COMMIT;
+        #endif
+        break;
+      case TX_ONLY:
+        #ifdef LIBCOATIGCC_BUFFER_ALL
+        // Clear ev buffers
+        ((ev_state *)curctx->extra_ev_state)->perm_buf_level = 0;
+        for(int i = 0; i < NUM_BINS; i++) {
+          ((ev_state *)curctx->extra_ev_state)->perm_sizes[i] = 0;
+        }
+        for(int i = 0; i < NUM_BINS; i++) {
+          ((ev_state *)curctx->extra_ev_state)->src_sizes[i] = 0;
+        }
+        tx_commit_ph2();
+        #else
+        // Add new function for handling end of a tx
+        #endif
+        curctx->commit_state = NO_COMMIT;
+        break;
+      case EV_ONLY:
+        #ifdef LIBCOATIGCC_BUFFER_ALL
+        #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+          #error "TEST_DEF_COUNT broken"
+        if(((tx_state *)curctx->extra_state)->in_tx == 0) {
+          item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
+        if(instrument)
+          add_to_histogram(item_count);
+        else
+          instrument = 1;
+          //printf("0,%u,0\r\n",item_count);
+        }
+        #endif
+        #else
+        #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+          #error "TEST_DEF_COUNT broken"
+        item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
+        if(instrument)
+          add_to_histogram(item_count);
+        else
+          instrument = 1;
+        #endif
+        #endif //BUFFER_ALL
+        ev_commit_ph2();
+        curctx->commit_state = NO_COMMIT;
+        break;
+      #ifdef LIBCOATIGCC_BUFFER_ALL
+      case TX_EV_COMMIT:
+        tx_commit_ph2();
+        ev_commit_ph2();
+        curctx->commit_state = NO_COMMIT;
+        break;
+      case EV_TX_COMMIT:
+        ev_commit_ph2();
+        tx_commit_ph2();
+        curctx->commit_state = NO_COMMIT;
+        break;
+      #endif // BUFFER_ALL
+      // Catch here if we didn't finish phase 1
+      case EV_PH1:
+      #ifndef LIBCOATIGCC_BUFFER_ALL
+      // If we're running split phase, wipe the ev bins to 0 and restart the
+      // deferred event
+        for(int i = 0; i < NUM_BINS; i++) {
+          ev_table.bucket_len[i] = 0;
+        }
+        ev_buf_level = 0;
+        curctx->commit_state = NO_COMMIT;
+      #else
+      // If we're in fully buffered we should never end up in here since fully
+      // bufferd handles in_ev cases earlier.
+        printf("Error! In EV_PH1 commit_phase2 after reboot!\r\n");
+        while(1);
+      #endif
+        break;
+      // For TSK, TX, TSK_IN_TX, wipe the bins and start the task again
+      case TSK_PH1:
+      case TX_PH1:
+      case TSK_IN_TX_PH1:
+        for(int i = 0; i < NUM_BINS; i++) {
+          tsk_table.bucket_len[i] = 0;
+        }
+        tsk_buf_level = 0;
+        curctx->commit_state = NO_COMMIT;
+        break;
+        curctx->commit_state = NO_COMMIT;
+        break;
+      default:
+        printf("Error! incorrect phase2 commit value: %x\r\n",
+                                                curctx->commit_state);
+        while(1);
     }
+  }
 }
 
 /**

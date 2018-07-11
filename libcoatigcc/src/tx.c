@@ -77,13 +77,14 @@ void tx_begin() {
  */
 void tsk_in_tx_commit_ph2() {
   uint16_t i = 0;
+  LCG_PRINTF("TX commit phase2\r\n")
   // Cycle through all the variables to commit and write back to tx_buff
   while(tsk_table.active_bins > 0)  {
-    uint16_t bin = tsk_table.active_bins;
+    uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
     while(tsk_table.bucket_len[bin] > 0) {
-      slot = tsk_table.bucket_len[bin];
+      slot = tsk_table.bucket_len[bin] - 1;
       // Add this to the tx table
       add_to_table(&tx_table, &tx_buf_level, tsk_table.src[bin][slot],
                   tsk_table.dst[bin][slot], tsk_table.size[bin][slot]);
@@ -106,6 +107,8 @@ void tx_commit_ph2() {
   LCG_PRINTF("Running tx_commit_ph2\r\n");
   // Copy all commit list entries
   while(tx_table.active_bins > 0)  {
+    // Decrement number of bins left to check
+    tx_table.active_bins--;
     uint16_t bin = tx_table.active_bins;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
@@ -119,8 +122,6 @@ void tx_commit_ph2() {
       // Decrement number of items in bin
       tx_table.bucket_len[bin]--;
     }
-    // Decrement number of bins left to check
-    tx_table.active_bins--;
   }
 }
 
