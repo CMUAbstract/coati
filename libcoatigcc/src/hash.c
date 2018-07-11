@@ -169,6 +169,7 @@ void * new_read(void *addr, size_t size, table_t *table) {
   }
 }
 
+#ifdef LIBCOATIGCC_BUFFER_ALL
 /*
  * @brief function to add an address to a basic src table structure
  */
@@ -223,6 +224,6 @@ uint8_t compare_src_tables(src_table *table1, src_table *table2) {
   return 0;
 }
 
-
+#endif // BUFFER_ALL
 
 
