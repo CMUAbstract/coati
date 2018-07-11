@@ -9,9 +9,6 @@
 #define LCG_PRINTF printf
 #endif
 
-uint8_t dirty_buf[BUF_LEN];
-uint16_t buf_level = 0;
-
 table_t tsk_table;
 
 /*
@@ -47,69 +44,49 @@ uint16_t check_table(table_t *table,void * addr) {
  * @ars pointer to table, pointer to table capacity, address to locate size of
  * var
  */
-uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr,
-                                     void * value,  size_t size) {
+uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap, 
+                              void * addr,void * value,  size_t size) {
   uint16_t bucket;
   // Calc hash of address
   bucket = hash(addr);
   bucket &= BIN_MASK;
   LCG_PRINTF("Bucket = %u\r\n",bucket);
-  // Optimization for empty buckets
-  if(table->bucket_len[bucket]) {
-    int i = 0;
-    uint16_t temp;
-    for(i = 0; i < table->bucket_len[bucket]; i++) {
-      if(table->src[bucket][i] == addr) {
-        memcpy(table->dst[bucket][i], value, size);
-        break;
-      }
+  int i = 0;
+  uint16_t temp;
+  // Check for matching address in bucket
+  // We should skip this if bucket_len == 0
+  while(i < table->bucket_len[bucket]) {
+    if(table->src[bucket][i] == addr) {
+      memcpy(table->dst[bucket][i], value, size);
+      break;
     }
-    // add to bucket if not present
-    if(i == table->bucket_len[bucket]) {
-      if(i + 1 > BIN_LEN) {
-        printf("Error! overflowed bin!\r\n");
-        while(1);
-        return 1;
-      }
-      (table->src[bucket][i]) = addr;
-      table->size[bucket][i] = size;
-      LCG_PRINTF("Setting stuff val %x --> %x with size %u,addr %x\r\n",
-                                        *((uint16_t *)value),
-                                        ((uint16_t) (table->src[bucket][i])),
-                                        table->size[bucket][i],
-                                        (uint16_t)addr);
-      temp = alloc(dirty_buf, cap, addr, size);
-      if(temp == 0xFFFF) {
-        printf("Alloc failed!\r\n");
-        while(1);
-        return 1;
-      }
-      table->dst[bucket][i] = dirty_buf + temp;
-      table->bucket_len[bucket]++;
-      memcpy(dirty_buf + temp, value, size);
-      LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
-    }
+    i++;
   }
-  else {
-    (table->src[bucket][0]) = addr;
-    table->size[bucket][0] = size;
-    LCG_PRINTF("Setting stuff val %u --> %x with size %u, addr %x\r\n",
-                                *((uint16_t*)value),
-                                ((uint16_t) (table->src[bucket][0])),
-                                table->size[bucket][0],
-                                ((uint16_t )addr));
-    uint16_t temp;
+  // add to bucket if not present
+  if(i == table->bucket_len[bucket]) {
+    if(i + 1 > BIN_LEN) {
+      printf("Error! overflowed bin!\r\n");
+      while(1);
+      return 1;
+    }
+    (table->src[bucket][i]) = addr;
+    table->size[bucket][i] = size;
+    LCG_PRINTF("Setting stuff val %x --> %x with size %u,addr %x\r\n",
+                                      *((uint16_t *)value),
+                                      ((uint16_t) (table->src[bucket][i])),
+                                      table->size[bucket][i],
+                                      (uint16_t)addr);
     temp = alloc(dirty_buf, cap, addr, size);
     if(temp == 0xFFFF) {
       printf("Alloc failed!\r\n");
       while(1);
       return 1;
     }
-    table->dst[bucket][0] = dirty_buf + temp;
+    table->dst[bucket][i] = dirty_buf + temp;
     table->bucket_len[bucket]++;
+    // Need to have this add down here so we persist this stuff correctly
     memcpy(dirty_buf + temp, value, size);
-    LCG_PRINTF("New val: %u or %u\r\n",*(uint16_t *)(dirty_buf + temp),
-                              *((uint16_t *)(table->dst[bucket][0])));
+    LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
   }
   LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
   return 0;
@@ -139,6 +116,10 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
       new_ptr++;
       extra++;
     }
+    // TODO get rid of this line
+    if(extra) {
+      LCG_PRINTF("Beefing up! %u\r\n", extra);
+    }
   }
   if(size == 4) {
     while(new_ptr & 0x11) {
@@ -150,11 +131,13 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
   if(new_ptr + size > (unsigned) (buf + BUF_LEN)) {
       return NULL;
   }
-
+  /*
+  // This is potentially how the memcpy should be happening, I'm just also
+  // wondering if it's problematic that it's here too...
   for(int i = 0; i < size; i++) {
     buf[*buf_cap + i] = *((uint8_t *)(addr + size - i - 1));
-  }
-  uint16_t loc = *buf_cap;
+  }*/
+  uint16_t loc = *buf_cap + extra;
   *buf_cap += size + extra;
   return loc;
 }

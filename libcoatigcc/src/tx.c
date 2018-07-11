@@ -86,7 +86,7 @@ void tsk_in_tx_commit_ph2() {
     while(tsk_table.bucket_len[bin] > 0) {
       slot = tsk_table.bucket_len[bin] - 1;
       // Add this to the tx table
-      add_to_table(&tx_table, &tx_buf_level, tsk_table.src[bin][slot],
+      add_to_table(&tx_table, tx_buf, &tx_buf_level, tsk_table.src[bin][slot],
                   tsk_table.dst[bin][slot], tsk_table.size[bin][slot]);
       // Decrement number of items in bin (don't worry about adding to tx bin
       // and then decrementing tsk bin, if we fail before dec, we'll just redo

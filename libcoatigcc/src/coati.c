@@ -307,7 +307,7 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
             }
             #endif // SER_TX_AFTER
             #endif //BUFFER_ALL
-            test = add_to_table(&ev_table, &ev_buf_level, addr, value, size);
+            test = add_to_table(&ev_table, ev_buf, &ev_buf_level, addr, value, size);
             if(test) {
               printf("Error writing to ev buffer\r\n");
             }
@@ -323,7 +323,7 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
             #endif // BUFFER_ALL
             // Intentional fall through
         case NORMAL:
-            test = add_to_table(&tsk_table, &tsk_buf_level, addr, value, size);
+            test = add_to_table(&tsk_table, tsk_buf, &tsk_buf_level, addr, value, size);
             if(test) {
               printf("Error writing to ev buffer\r\n");
             }

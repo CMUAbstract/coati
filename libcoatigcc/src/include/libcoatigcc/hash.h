@@ -24,7 +24,7 @@ typedef struct src_table_ {
 
 
 uint16_t hash(void * address);
-uint16_t add_to_table(table_t *table, uint16_t *cap, void * addr,
+uint16_t add_to_table(table_t *table, uint8_t *buf, uint16_t *cap, void * addr,
                                             void * value, size_t size);
 uint16_t check_table(table_t *table, void * addr);
 uint16_t alloc(uint8_t * buf, uint16_t *cap, void * addr, size_t size);
