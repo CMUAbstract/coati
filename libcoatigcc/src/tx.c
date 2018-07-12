@@ -145,7 +145,8 @@ void tx_commit_ph1_5() {
   // Default setting
   #ifndef LIBCOATIGCC_SER_TX_AFTER
     if(((ev_state *)curctx->extra_ev_state)->ev_need_commit) {
-      conflict = compare_src_tables(&ev_read_table, &tx_write_table);
+      uint16_t ev_len = ((ev_state*)curctx->extra_ev_state)->num_read;
+      conflict = compare_list_to_hash(&tx_write_table, ev_read_list, ev_len);
       if(conflict) {
         // Clear need_commit flag so we don't get in here again
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 0;
@@ -164,8 +165,8 @@ void tx_commit_ph1_5() {
     }
   #else
     if(((ev_state *)curctx->extra_ev_state)->ev_need_commit) {
-      uint16_t ev_len = 0, tx_len = 0;
-      conflict = compare_src_tables(&ev_write_table, &tx_read_table);
+      uint16_t ev_len = ((ev_state*)curctx->extra_ev_state)->num_write;
+      conflict = compare_list_to_hash(&tx_read_table, ev_write_list, ev_len);
       if(conflict == 1) {
         LCG_CONF_REP("Conflict! Only committing ev\r\n");
         // Clear need_commit flag so we don't get in here again

@@ -10,15 +10,16 @@
 #define EV  1
 #define NUM_PRIO_LEVELS 2
 
-extern uint16_t events_noted;
-
 typedef struct _ev_state {
+    uint16_t num_devv;
+#ifdef LIBCOATIGCC_BUFFER_ALL
+    // TODO trim these down based on SER_TX_AFTER
+    uint16_t num_read;
+    uint16_t num_write;
+#endif// BUFFER_ALL
     uint8_t in_ev;
 #ifdef LIBCOATIGCC_BUFFER_ALL
     uint8_t ev_need_commit;
-    size_t *perm_sizes;
-    size_t *src_sizes;
-    uint16_t perm_buf_level;
 #else
     uint8_t count;
     uint8_t committed;
@@ -28,7 +29,9 @@ typedef struct _ev_state {
 // For instrumentation
 extern uint16_t _numEvents_uncommitted;
 
+extern volatile uint16_t num_evbe;
 #ifdef LIBCOATIGCC_BUFFER_ALL
+extern volatile uint16_t num_evread;
 #endif// BUFFER_ALL
 
 extern ev_state state_ev_1;
@@ -37,14 +40,12 @@ extern ev_state state_ev_0;
 #ifdef LIBCOATIGCC_BUFFER_ALL
 extern context_t *thread_ctx; 
 extern task_t * cur_tx_start;
-
 #ifdef LIBCOATIGCC_SER_TX_AFTER
-extern src_table ev_write_table;
+extern void * ev_write_list[];
 #else
-extern src_table ev_read_table;
+extern void * ev_read_list[];
 #endif // SER_TX_AFTER
 void event_handler();
-
 #else
 extern context_t thread_ctx; 
 extern void queued_event_handoff();
@@ -52,13 +53,20 @@ extern void queued_event_handoff();
 
 void ev_commit_ph2();
 
+int16_t  ev_find(const void * addr);
+void *  ev_get_dst(void * addr);
+void * ev_buf_alloc(void * addr, size_t size);
 
+extern volatile uint16_t num_evbe;
 #ifdef LIBCOATIGCC_BUFFER_ALL
+extern volatile uint16_t num_evread;
+extern volatile uint16_t num_evwrite;
 #endif // BUFFER_ALL
 
-extern uint8_t ev_buf[BUF_SIZE];
-extern table_t ev_table;
-extern uint16_t ev_buf_level;
+extern __nv uint8_t ev_buf[BUF_SIZE];
+extern __nv void * ev_src[];
+extern __nv void * ev_dst[];
+extern __nv size_t ev_size[];
 
 #define EVENT_ENABLE_FUNC(func) void _enable_events() { func(); }
 #define EVENT_DISABLE_FUNC(func) void _disable_events() { func(); }
@@ -66,6 +74,8 @@ extern uint16_t ev_buf_level;
 void _enable_events();
 void _disable_events();
 
+unsigned _temp;
+void *event_memcpy(void *dest, void *src, uint16_t num);
 
 #define CONTEXT_SYM_NAME(name) \
         _ev_ctx_ ## name
@@ -74,9 +84,11 @@ void _disable_events();
 #define EV_READ(x,type) \
     *((type *)read(&(x),sizeof(type),EVENT))
 
+
+
 #define EV_WRITE(x,val,type,is_ptr) \
     { type _temp_loc = val;\
-          write(&(x),sizeof(type),EVENT,&_temp_loc);\
+          write(&(x),sizeof(type),EVENT,_temp_loc);\
     }
 
 /*
@@ -113,9 +125,9 @@ void _disable_events();
 #define EVENT(index,name) \
         void name(); \
         __nv task_t TASK_SYM_NAME(name) = { name, index, 1, #name }; \
-        __nv tx_state TX_ST_SYM_NAME(name) = {0,0}; \
-        __nv ev_state EV_ST_SYM_NAME(name) = {1,0};\
-        __nv ev_state EV_ST2_SYM_NAME(name) = {1,0};\
+        __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0,0,0,0}; \
+        __nv ev_state EV_ST_SYM_NAME(name) = {0,0,0,1,0};\
+        __nv ev_state EV_ST2_SYM_NAME(name) = {0,0,0,1,0};\
         __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
                                                   TX_ST_REF(name), \
                                                   EV_ST_REF(name) \
@@ -125,9 +137,9 @@ void _disable_events();
 #define EVENT(index,name) \
         void name(); \
         __nv task_t TASK_SYM_NAME(name) = { name, index, #name }; \
-        __nv tx_state TX_ST_SYM_NAME(name) = {0,0}; \
-        __nv ev_state EV_ST_SYM_NAME(name) = {1,0};\
-        __nv ev_state EV_ST2_SYM_NAME(name) = {1,0};\
+        __nv tx_state TX_ST_SYM_NAME(name) = {0,0,0,0,0,0}; \
+        __nv ev_state EV_ST_SYM_NAME(name) = {0,0,0,1,0};\
+        __nv ev_state EV_ST2_SYM_NAME(name) = {0,0,0,1,0};\
         __nv context_t CONTEXT_SYM_NAME(name) = { & _task_ ## name , \
                                                   TX_ST_REF(name), \
                                                   EV_ST_REF(name) \
@@ -155,5 +167,6 @@ void _disable_events();
 
 #define CONTEXT_REF(name) \
         &CONTEXT_SYM_NAME(name)
+
 
 #endif //_EVENT_H_

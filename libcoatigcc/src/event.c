@@ -16,23 +16,28 @@
 #define LCG_PRINTF printf
 #endif
 
-uint16_t events_noted = 0;
 __nv uint8_t ev_buf[BUF_SIZE];
-__nv uint16_t ev_buf_level = 0;
-__nv table_t ev_table = {.bucket_len = {0}, .active_bins = 0};
-
-__nv size_t table_sizes[NUM_BINS];
-__nv size_t src_table_sizes[NUM_BINS];
-
+__nv void * ev_src[NUM_DIRTY_ENTRIES];
+__nv void * ev_dst[NUM_DIRTY_ENTRIES];
+__nv size_t ev_size[NUM_DIRTY_ENTRIES];
 #ifdef LIBCOATIGCC_BUFFER_ALL
-
 #ifdef LIBCOATIGCC_SER_TX_AFTER
-__nv src_table ev_write_table;
+__nv void * ev_write_list[NUM_DIRTY_ENTRIES];
 #else
-__nv src_table ev_read_table;
-#endif // SER_TX_AFTER
+__nv void * ev_read_list[NUM_DIRTY_ENTRIES];
+#endif
 
 __nv task_t * cur_tx_start;
+
+volatile uint16_t num_evread = 0;
+volatile uint16_t num_evwrite = 0;
+#else
+/*__nv the_event_ctx = {
+  .task = NULL,
+  .extra_state = &bh_state_0,
+  .extra_ev_state = &bh_state_ev_0,
+  .commit_state = EV_PH1
+};*/
 
 #endif // BUFFER_ALL
 
@@ -45,18 +50,21 @@ __nv context_t * thread_ctx;
 __nv context_t  thread_ctx;
 #endif // BUFFER_ALL
 
+volatile uint16_t num_evbe = 0;
 
 __nv ev_state state_ev_1 = {0};
 __nv ev_state state_ev_0 = {
+    .num_devv = 0,
+#ifdef LIBCOATIGCC_BUFFER_ALL
+    .num_read = 0,
+    .num_write = 0,
+#endif // BUFFER_ALL
     .in_ev = 0,
 #ifdef LIBCOATIGCC_BUFFER_ALL
-  .ev_need_commit = 0,
-  .perm_sizes = table_sizes,
-  .src_sizes = src_table_sizes,
-  .perm_buf_level = 0
+  .ev_need_commit = 0
 #else
   .count = 0,
-  .committed = 0,
+  .committed = 0
 #endif // BUFFER_ALL
 };
 
@@ -72,6 +80,7 @@ __nv uint16_t _numEvents_uncommitted = 0;
  * triggered
  */
 void event_handler(context_t *new_event_ctx) {
+  //TRANS_TIMER_START
   // Disable all event interrupts but enable global interrupts
   // NEEDS TO BE DONE IN THAT ORDER!!!!!!!
   _disable_events();
@@ -85,31 +94,33 @@ void event_handler(context_t *new_event_ctx) {
   }
 
   // Clear commit flag for this context
-  ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 0;
-  // Set all of the event_buffer/src_table lengths based on the stuff stored in
-  // the permanent lengths from the current ev state
-  ev_buf_level = ((ev_state *)curctx->extra_ev_state)->perm_buf_level;
-  for(int i = 0; i < NUM_BINS; i++) {
-    ev_table.bucket_len[i] = 
-            ((ev_state*)curctx->extra_ev_state)->perm_sizes[i];
-  }
-  for(int i = 0; i < NUM_BINS; i++) {
-    #ifdef LIBCOATIGCC_SER_TX_AFTER
-    ev_write_table.bucket_len[i] =
-            ((ev_state*)curctx->extra_ev_state)->src_sizes[i];
-    #else
-    ev_read_table.bucket_len[i] =
-            ((ev_state*)curctx->extra_ev_state)->src_sizes[i];
-    #endif // SER_TX_AFTER
-  }
+  // TODO add in some error checking
+  ((ev_state *)new_event_ctx->extra_ev_state)->ev_need_commit = 0;
+  ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
+                              ((ev_state *)curctx->extra_ev_state)->num_devv;
+  // Clear event buffer counters but don't turn on curctx->in_ev! If we died
+  // after seeting that, events would continously be disabled and they'd never
+  // get turned back on
+  num_evbe = 0;
+  num_evread = 0;
+  num_evwrite = 0;
+
+  // Pass across the number of variables in the ev buffer from the threadctx
+  // to the active eventctx so that the next event can access the old
+  // variables (it's fine to leave this unprotected from a power standpoint,
+  // it'll just get rewritten if we power down
+  ((ev_state *)new_event_ctx->extra_ev_state)->num_devv =
+      ((ev_state *)curctx->extra_ev_state)->num_devv;
+  LCG_PRINTF("In event handler! coming from %x \r\n",curctx->task->func);
+
   // Point threads' context at current context
   thread_ctx=curctx;
   LCG_PRINTF("Double check in:  %x, in tx: %u \r\n",thread_ctx->task->func,
   ((tx_state *)thread_ctx->extra_state)->in_tx);
-  
+  //printf("SR:%x\r\n",READ_SP);
   // Set curctx with prepackaged event_ctx
   curctx = new_event_ctx;
-  
+  //printf("h: ");
   TRANS_TIMER_STOP
   __asm__ volatile ( // volatile because output operands unused by C
         "mov #0x2400, r1\n"
@@ -125,6 +136,7 @@ void event_handler(context_t *new_event_ctx) {
  */
 void queued_event_handoff(void) {
   _disable_events();
+  LCG_PRINTF("in event handler!\r\n");
   context_t *next_ctx;
   tx_state *new_tx_state;
   ev_state *new_ev_state;
@@ -138,23 +150,14 @@ void queued_event_handoff(void) {
 
   // Transfer in tx value
   new_tx_state->in_tx = ((tx_state *)curctx->extra_state)->in_tx;
-  // TODO remove this check once we confirm that the lengths are always 0
-  /*
-  if(ev_buf_level) {
-    printf("Error! buf level isn't 0");
-    while(1);
-  }
-  for(int i = 0; i < NUM_BINS; i++) {
-    if(ev_table.bucket_len[i] != 0) {
-      printf("Error! bucket len isn't 0, it's %u in bucket %u", 
-                                              ev_table.bucket_len[i], i);
-      while(1);
-    }
-  }*/
+  // Clear num_devv and set in_ev flag
+  new_ev_state->num_devv = 0;
   new_ev_state->in_ev = 1;
   next_ctx->extra_ev_state = new_ev_state;
   next_ctx->commit_state = NO_COMMIT;
   next_ctx->task = event_queue.tasks[1];
+  num_evbe = 0;
+
   LCG_PRINTF("In event queue! coming from %x, going to %x \r\n",
           curctx->task->func, next_ctx->task->func);
   // Copy contents of curctx to threadctx
@@ -181,37 +184,105 @@ void queued_event_handoff(void) {
 #endif // BUFFER_ALL
 
 /*
+ * @brief returns the index into the tx buffers of where the data is located
+ */
+int16_t  ev_find(const void * addr) {
+    int16_t num_vars = 0;
+    num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
+    if(num_vars) {
+      for(int i = 0; i < num_vars; i++) {
+      #ifdef LIBCOATIGCC_TEST_COUNT
+        access_len++;
+      #endif
+          //LCG_PRINTF("Checking %x \r\n",ev_dirty_src[i]);
+          if(addr == ev_src[i])
+              return i;
+      }
+    }
+    return -1;
+}
+
+/*
+ * @brief returns the pointer into the tx dirty buf where the data is located
+ */
+void *  ev_get_dst(void * addr) {
+    int16_t num_vars = 0;
+    num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
+    if(num_vars) {
+      for(int i = 0; i < num_vars; i++) {
+          if(addr == ev_src[i])
+              return ev_dst[i];
+      }
+    }
+    return NULL;
+}
+
+
+/*
  * @brief: commit values touched during events back to main memory
  */
 void ev_commit_ph2() {
-  // Copy all commit list entries
-  while(ev_table.active_bins > 0)  {
-    uint16_t bin = ev_table.active_bins - 1;
-    uint16_t slot;
-    // Walk through each slot in each bin w/ at least one value slotted in
-    while(ev_table.bucket_len[bin] > 0) {
-      slot = ev_table.bucket_len[bin] - 1;
-      // Copy from dst in ev buf to "home" for that variable
-      memcpy( ev_table.src[bin][slot],
-              ev_table.dst[bin][slot],
-              ev_table.size[bin][slot]
-            );
-      // Decrement number of items in bin
-      ev_table.bucket_len[bin]--;
+    // Copy all tx buff entries to main memory
+    LCG_PRINTF("Running ev_commit! should commit %u\r\n",
+    ((ev_state*)(curctx->extra_ev_state))->num_devv);
+    while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
+        uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
+        LCG_PRINTF("Copying %i th time from %x to %x \r\n", num_devv-1,
+        ev_src[num_devv-1],
+        ev_dst[num_devv - 1]);
+        memcpy( ev_src[num_devv -1],
+                ev_dst[num_devv - 1],
+                ev_size[num_devv - 1]
+        );
+        ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
-    // Decrement number of bins left to check
-    ev_table.active_bins--;
-  }
-  ev_buf_level = 0;
-  #ifdef LIBCOATIGCC_BUFFER_ALL
-  for(int i = 0; i < NUM_BINS; i++) {
-    tsk_table.bucket_len[i] = 0;
-  }
-  tsk_buf_level = 0;
-  ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = 0;
-  #endif
+#ifdef LIBCOATIGCC_BUFFER_ALL
+    ((ev_state *)(curctx->extra_ev_state))->ev_need_commit = 0;
+#endif
 }
 
 
 
+
+/*
+ * @brief allocs space in event buffer and returns a pointer to the spot,
+ * returns NULL if buf is out of space
+ */
+void * ev_buf_alloc(void * addr, size_t size) {
+    uint16_t new_ptr;
+    LCG_PRINTF("In alloc! num_evbe = %i, buf = %x\r\n",num_evbe, ev_buf);
+    uint16_t num_vars = 0;
+    num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
+    if(num_vars) {
+        new_ptr = (uint8_t *) ev_dst[num_vars - 1] +
+        ev_size[num_vars - 1];
+    }
+    else {
+        new_ptr = (uint8_t *) ev_buf;
+    }
+    // Fix alignment struggles
+    if(size == 2) {
+      while(new_ptr & 0x1)
+        new_ptr++;
+    }
+    if(size == 4) {
+      while(new_ptr & 0x11)
+        new_ptr++;
+    }
+    if(new_ptr + size > (unsigned) (ev_buf + BUF_SIZE)) {
+        LCG_PRINTF("asking for %u, only have %u \r\n", new_ptr + size,
+        (unsigned) (ev_buf + BUF_SIZE));
+        return NULL;
+    }
+    else {
+        num_evbe++;
+        num_vars++;
+        LCG_PRINTF("ev new src = %x new dst = %x index %i\r\n", addr, new_ptr,
+        num_vars);
+        ev_src[num_vars - 1] = addr;
+        ev_dst[num_vars - 1] = (void *) new_ptr;
+        ev_size[num_vars - 1] = size;
+    }
+    return (void *) new_ptr;
+}
 

@@ -224,6 +224,28 @@ uint8_t compare_src_tables(src_table *table1, src_table *table2) {
   return 0;
 }
 
+uint8_t compare_list_to_hash(src_table *table, void **list, uint16_t list_len) {
+  uint16_t bucket;
+  // Cycle through all values in the list
+  for(uint16_t i = 0; i < list_len; i++) {
+    // Calc hash of address
+    void *addr;
+    addr = list[i];
+    bucket = hash(addr);
+    bucket &= BIN_MASK;
+    // Check bucket if it's occupied
+    if(table->bucket_len[bucket]) {
+      // Check each slot to see if addr matches
+      for(int j = 0; j < table->bucket_len[bucket]; j++) {
+        if(table->src[bucket][j] == addr) {
+          return 1; 
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 #endif // BUFFER_ALL
 
 

@@ -117,6 +117,8 @@ static void tsk_commit_ph2(void);
 void tsk_commit_ph2() {
   // Copy all commit list entries
   LCG_PRINTF("In tsk commit\r\n");
+  // TODO take this check out
+  printf("Active bin: %u\r\n",tsk_table.active_bins);
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
@@ -162,30 +164,51 @@ void * read(const void *addr, size_t size, acc_type acc) {
       }
     #endif
     uint16_t flag;
+    int index;
+    uint16_t read_cnt;
     uint16_t test = 0;
     void * dst;
     switch(acc) {
         case EVENT:
-            // Only add to read list if we're buffering all updates
-            #ifdef LIBCOATIGCC_BUFFER_ALL
-            #ifndef LIBCOATIGCC_SER_TX_AFTER
-            // add the address to the read list
-            test = add_to_src_table(&ev_read_table, addr);
-            if(test) {
-              printf("Error adding to ev_read_table!\r\n");
+          // Only add to read list if we're buffering all updates
+          #ifdef LIBCOATIGCC_BUFFER_ALL
+          #ifndef LIBCOATIGCC_SER_TX_AFTER
+          // add the address to the read list
+          read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
+          read_cnt += num_evread;
+          if(read_cnt >= NUM_DIRTY_ENTRIES) {
+            int test = 0;
+            // A bit of a cheat to keep the usual overhead low if you're
+            // accessing the same memory in a task. This could all be obviated
+            // by a compiler pass that determined the maximum number of reads
+            // that are possible.
+            test = check_list(ev_read_list, read_cnt, addr);
+            if(!test) {
+              printf("Out of space in ev read list!\r\n");
+              while(1);
             }
-            #endif // SER_TX_AFTER
-            #endif // BUFFER_ALL
-            // first check buffer for value
-            flag = check_table(&ev_table, addr);
-            if(flag != HASH_ERROR) {
-               dst = (void *) flag;
-            }
-            // Return main memory addr
-            else {
-                dst = (void *) addr;
-            }
-            break;
+          }
+          else {
+            ev_read_list[read_cnt] = (void *) addr;
+            num_evread++;
+          }
+          #endif // SER_TX_AFTER
+          #endif // BUFFER_ALL
+
+          // first check buffer for value
+          index = ev_find(addr);
+          // Now pull the memory from somewhere
+          LCG_PRINTF("ev index = %u \r\n", index);
+          if(index > -1) {
+             dst = (void *) ev_dst[index];
+            LCG_PRINTF("rd: index = %u, Found, Buffer vals: ", index);
+          }
+          // Return main memory addr
+          else {
+              dst = (void *) addr;
+          }
+          break;
+
         #ifdef LIBCOATIGCC_TEST_COUNT
         case NORMAL_NI:
             instrument = 0;
@@ -280,24 +303,69 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
         w_tsk_counts++;
       }
     #endif
+    int index;
     uint16_t test = 0;
+    uint16_t write_cnt;
     //LCG_PRINTF("value incoming = %i type = %i \r\n", value, acc);
     switch(acc) {
         case EVENT:
             LCG_PRINTF("Running event write!\r\n");
             #ifdef LIBCOATIGCC_BUFFER_ALL
+            // add to write list
             #ifdef LIBCOATIGCC_SER_TX_AFTER
-            test = add_to_src_table(&ev_write_table, addr);
-            if(test) {
-              printf("Error adding to ev_write_table!\r\n");
-              while(1);
+            write_cnt = ((ev_state *)curctx->extra_ev_state)->num_write;
+            write_cnt += num_evwrite;
+            if(write_cnt >= NUM_DIRTY_ENTRIES) {
+              int test = 0;
+              // A bit of a cheat to keep the usual overhead low if you're
+              // accessing the same memory in a task. This could all be obviated
+              // by a compiler pass that determined the maximum number of reads
+              // that are possible.
+              test = check_list(ev_write_list, write_cnt, addr);
+              if(!test) {
+                printf("Out of space in ev write list!\r\n");
+                while(1);
+              }
+            }
+            else {
+              ev_write_list[write_cnt] = (void *) addr;
+              num_evwrite++;
             }
             #endif // SER_TX_AFTER
             #endif //BUFFER_ALL
-            test = add_to_table(&ev_table, ev_buf, &ev_buf_level, addr, value, size);
-            if(test) {
-              printf("Error writing to ev buffer\r\n");
-              while(1);
+            // Check if addr is already in buffer
+            index = ev_find(addr);
+            // TODO fix this copy nonsense
+            if(index > -1) {
+              if (size == sizeof(uint8_t)) {
+                *((uint8_t *) ev_dst[index]) = (uint8_t) value;
+              } else if(size == sizeof(uint16_t)) {
+                *((uint16_t *) (ev_dst[index]) ) = (uint16_t) value;
+              } else if(size == sizeof(uint32_t)) {
+                *((uint32_t *) (ev_dst[index])) = (uint32_t) value;
+              } else {
+                  printf("Ev Error! invalid size!\r\n");
+                  while(1);
+              }
+            }
+            else {
+                void * dst = ev_buf_alloc(addr, size);
+                if(dst) {
+                  if (size == sizeof(char)) {
+                    *((uint8_t *) dst) = (uint8_t) value;
+                  } else if(size == sizeof(uint16_t)) {
+                    *((uint16_t *) dst) = (uint16_t) value;
+                  } else if(size == sizeof(uint32_t)) {
+                    *((uint32_t *) dst) = (uint32_t) value;
+                  } else {
+                    printf("Ev Error! invalid size!\r\n");
+                    while(1);
+                  }
+                } else {
+                    // Error! we ran out of space
+                    printf("Ev Error! out of space!\r\n");
+                    while(1);
+                }
             }
             break;
         case TX:
@@ -381,10 +449,12 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
     #endif // BUFFER_ALL
 
     case EV_PH1:
-      // TODO did this latch the updates from last time?
-      ev_table.active_bins = NUM_BINS;
+
       #ifdef LIBCOATIGCC_BUFFER_ALL
       new_ev->in_ev = 0;
+      new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
+                         num_evbe;
+
       // Drop in transaction state from interrupted thread
       // Copy the ev contents though
       *new_tx = *((tx_state *)thread_ctx->extra_state);
@@ -395,12 +465,20 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       }
       else {
         LCG_PRINTF("thread is in tx!\r\n");
+        new_ev->num_read = ((ev_state *)curctx->extra_ev_state)->num_read +
+                           num_evread;
+        new_ev->num_write = ((ev_state *)curctx->extra_ev_state)->num_write +
+                           num_evwrite;
         new_ctx->commit_state = EV_FUTURE;
       }
       #else
+      new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
+                         num_evbe;
       new_ctx->commit_state = EV_ONLY;
       // We're done walking the events, get ready to go back to the normal
       // thread.
+      LCG_PRINTF("count: %u, committed: %u\r\n",((ev_state*)curctx->extra_ev_state)->count,
+                                    ((ev_state*)curctx->extra_ev_state)->committed);
       if(((ev_state *)curctx->extra_ev_state)->count <= 
                             ((ev_state *)curctx->extra_ev_state)->committed + 1){
         LCG_PRINTF("Done! Heading back to %x\r\n", thread_ctx.task->func);
@@ -436,6 +514,13 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
  */
 void commit_phase2() {
   LCG_PRINTF("Phase2 state = %u\r\n",curctx->commit_state);
+  // Need to clear bins even if we didn't get to latch a commit
+  if(curctx->commit_state == NO_COMMIT) {
+    for(int i = 0; i < NUM_BINS; i++) {
+      tsk_table.bucket_len[i] = 0;
+    }
+    tsk_buf_level = 0;
+  }
   while(curctx->commit_state != NO_COMMIT) {
     switch(curctx->commit_state) {
       case TSK_COMMIT:
@@ -476,11 +561,6 @@ void commit_phase2() {
         break;
       case EV_FUTURE:
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
-        // Now clean out task buffers since we're returning
-        for(int i = 0; i <  NUM_BINS; i++) {
-          tsk_buf.bucket_len[i] = 0;
-        }
-        tsk_buf_level = 0;
         curctx->commit_state = NO_COMMIT;
         break;
       #endif // BUFFER_ALL
@@ -526,14 +606,9 @@ void commit_phase2() {
         break;
       case TX_ONLY:
         #ifdef LIBCOATIGCC_BUFFER_ALL
-        // Clear ev buffers
-        ((ev_state *)curctx->extra_ev_state)->perm_buf_level = 0;
-        for(int i = 0; i < NUM_BINS; i++) {
-          ((ev_state *)curctx->extra_ev_state)->perm_sizes[i] = 0;
-        }
-        for(int i = 0; i < NUM_BINS; i++) {
-          ((ev_state *)curctx->extra_ev_state)->src_sizes[i] = 0;
-        }
+        ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+        ((ev_state *)curctx->extra_ev_state)->num_write = 0;
+        ((ev_state *)curctx->extra_ev_state)->num_devv = 0;
         tx_commit_ph2();
         #else
         // Add new function for handling end of a tx
@@ -553,7 +628,10 @@ void commit_phase2() {
           //printf("0,%u,0\r\n",item_count);
         }
         #endif// TEST_DEF_COUNT
+        ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+        ((ev_state *)curctx->extra_ev_state)->num_write = 0;
         // Need to clear tsk_buf since we're restarting the interrupted task
+        // TODO figure out if this is a point of slowdown
         for(int i = 0; i < NUM_BINS; i++) {
           tsk_table.bucket_len[i] = 0;
         }
@@ -573,11 +651,15 @@ void commit_phase2() {
         break;
       #ifdef LIBCOATIGCC_BUFFER_ALL
       case TX_EV_COMMIT:
+        ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+        ((ev_state *)curctx->extra_ev_state)->num_write = 0;
         tx_commit_ph2();
         ev_commit_ph2();
         curctx->commit_state = NO_COMMIT;
         break;
       case EV_TX_COMMIT:
+        ((ev_state *)curctx->extra_ev_state)->num_read = 0;
+        ((ev_state *)curctx->extra_ev_state)->num_write = 0;
         ev_commit_ph2();
         tx_commit_ph2();
         curctx->commit_state = NO_COMMIT;
@@ -585,20 +667,7 @@ void commit_phase2() {
       #endif // BUFFER_ALL
       // Catch here if we didn't finish phase 1
       case EV_PH1:
-      #ifndef LIBCOATIGCC_BUFFER_ALL
-      // If we're running split phase, wipe the ev bins to 0 and restart the
-      // deferred event
-        for(int i = 0; i < NUM_BINS; i++) {
-          ev_table.bucket_len[i] = 0;
-        }
-        ev_buf_level = 0;
         curctx->commit_state = NO_COMMIT;
-      #else
-      // If we're in fully buffered we should never end up in here since fully
-      // bufferd handles in_ev cases earlier.
-        printf("Error! In EV_PH1 commit_phase2 after reboot!\r\n");
-        while(1);
-      #endif
         break;
       // For TSK, TX, TSK_IN_TX, wipe the bins and start the task again
       case TSK_PH1:
@@ -628,7 +697,7 @@ void commit_phase2() {
  *  TODO: mark this function as bare (i.e. no prologue) for efficiency
  */
 void transition_to(task_t *next_task)
-{ 
+{
   // disable event interrupts so we don't have to deal with them during
   // transition
   _disable_events();
@@ -747,24 +816,6 @@ int main() {
     // TODO: task the fluff out of this so it's not so bulky. Most of
     // transition_to doesn't apply in this case
     if(((ev_state *)curctx->extra_ev_state)->in_ev) {
-      // Restore old counters and run with it (buf_level, table sizes, source
-      // sizes)
-      ev_buf_level = ((ev_state *)(curctx->extra_ev_state))->perm_buf_level;
-      for(int i = 0; i < NUM_BINS; i++) {
-        ev_table.bucket_len[i] = 
-                ((ev_state*)(curctx->extra_ev_state))->perm_sizes[i];
-      }
-      #ifdef LIBCOATIGCC_SER_TX_AFTER
-      for(int i = 0; i < NUM_BINS; i++) {
-        ev_write_table.bucket_len[i] = 
-                ((ev_state*)(curctx->extra_ev_state))->src_sizes[i];
-      }
-      #else
-      for(int i = 0; i < NUM_BINS; i++) {
-        ev_read_table.bucket_len[i] = 
-                ((ev_state*)(curctx->extra_ev_state))->src_sizes[i];
-      }
-      #endif
       curctx->commit_state = EV_PH1;
       // Just run this so all of the state needed for future events running
       // inside the same tx and all that will get transferred.

@@ -32,6 +32,7 @@ uint16_t alloc(uint8_t * buf, uint16_t *cap, void * addr, size_t size);
 #ifdef LIBCOATIGCC_BUFFER_ALL
 uint16_t add_to_src_table(src_table *table, void * address);
 uint8_t compare_src_tables(src_table *table1, src_table *table2);
+uint8_t compare_list_to_hash(src_table *table, void **list, uint16_t len);
 #endif // BUFFER_ALL
 
 #endif // HASH_H
