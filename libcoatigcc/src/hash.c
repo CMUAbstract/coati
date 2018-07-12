@@ -65,12 +65,12 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
   // add to bucket if not present
   if(i == table->bucket_len[bucket]) {
     if(i + 1 > BIN_LEN) {
-      printf("Error! overflowed bin!\r\n");
+      printf("Error! overflowed bin! %u %u\r\n", i, table->bucket_len[bucket]);
       return 1;
     }
     (table->src[bucket][i]) = addr;
     table->size[bucket][i] = size;
-    LCG_PRINTF("Setting stuff val %x --> %x with size %u,addr %x\r\n",
+    LCG_PRINTF("Setting stuff val %u --> %x with size %u,addr %x\r\n",
                                       *((uint16_t *)value),
                                       ((uint16_t) (table->src[bucket][i])),
                                       table->size[bucket][i],
@@ -180,20 +180,24 @@ uint16_t add_to_src_table(src_table *table, void *addr) {
   bucket &= BIN_MASK;
   LCG_PRINTF("Bucket = %u\r\n",bucket);
   int i = 0;
+  int flag = 0;
   while(i < table->bucket_len[bucket]) {
     if(table->src[bucket][i] == addr) {
+      flag = 1;
       break;
     }
     i++;
   }
   // add to bucket if not present
   if(i + 1 > BIN_LEN) {
-    printf("Error! overflowed bin!\r\n");
+    printf("Error! overflowed bin! %u %u\r\n", bucket, table->bucket_len[bucket]);
     return 1;
   }
-  (table->src[bucket][i]) = addr;
-  table->bucket_len[bucket]++;
-  LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
+  if(!flag) {
+    (table->src[bucket][i]) = addr;
+    table->bucket_len[bucket]++;
+  }
+  LCG_PRINTF("final bucket len = %u bucket=%u\r\n",table->bucket_len[bucket], bucket);
   return 0;
 }
 

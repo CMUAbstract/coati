@@ -118,7 +118,7 @@ void tsk_commit_ph2() {
   // Copy all commit list entries
   LCG_PRINTF("In tsk commit\r\n");
   // TODO take this check out
-  printf("Active bin: %u\r\n",tsk_table.active_bins);
+  LCG_PRINTF("Active bin: %u\r\n",tsk_table.active_bins);
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
@@ -436,7 +436,6 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       tsk_table.active_bins = NUM_BINS;
       #ifdef LIBCOATIGCC_BUFFER_ALL
       tx_table.active_bins = NUM_BINS;
-      ev_table.active_bins = NUM_BINS;
       #endif // BUFFER_ALL
       new_ctx->commit_state = TX_COMMIT;
       break;

@@ -77,7 +77,7 @@ void tx_begin() {
  */
 void tsk_in_tx_commit_ph2() {
   uint16_t i = 0;
-  LCG_PRINTF("TX commit phase2\r\n")
+  LCG_PRINTF("tsk_in_tx commit phase2\r\n");
   // Cycle through all the variables to commit and write back to tx_buff
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
@@ -129,6 +129,7 @@ void tx_commit_ph2() {
       tx_table.bucket_len[bin]--;
     }
   }
+  tx_buf_level = 0;
 }
 
 /*
