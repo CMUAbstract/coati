@@ -227,13 +227,14 @@ void ev_commit_ph2() {
     ((ev_state*)(curctx->extra_ev_state))->num_devv);
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
         uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
-        LCG_PRINTF("Copying %i th time from %x to %x \r\n", num_devv-1,
-        ev_src[num_devv-1],
-        ev_dst[num_devv - 1]);
         memcpy( ev_src[num_devv -1],
                 ev_dst[num_devv - 1],
                 ev_size[num_devv - 1]
         );
+        LCG_PRINTF("Copying %i th time to %x from %x val %c \r\n", num_devv-1,
+        ev_src[num_devv-1],
+        ev_dst[num_devv - 1],
+        *((char *)ev_src[num_devv-1]));
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
 #ifdef LIBCOATIGCC_BUFFER_ALL

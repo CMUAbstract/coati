@@ -90,6 +90,10 @@ void tsk_in_tx_commit_ph2() {
       flag = add_to_table(&tx_table, tx_buf, &tx_buf_level,
                           tsk_table.src[bin][slot], tsk_table.dst[bin][slot], 
                           tsk_table.size[bin][slot]);
+      LCG_PRINTF("Inserted %x to %x val = %x\r\n",
+                                *((uint16_t *)tsk_table.dst[bin][slot]),
+                                (uint16_t)tsk_table.src[bin][slot],
+                                *((uint16_t *)tsk_table.src[bin][slot]));
       if(flag) {
         printf("Error allocing tx buf\r\n");
         while(1);
@@ -102,6 +106,7 @@ void tsk_in_tx_commit_ph2() {
     // Decrement number of bins left to check
     tsk_table.active_bins--;
   }
+  tsk_buf_level = 0;
 }
 
 
@@ -115,20 +120,44 @@ void tx_commit_ph2() {
   while(tx_table.active_bins > 0)  {
     // Decrement number of bins left to check
     tx_table.active_bins--;
-    uint16_t bin = tx_table.active_bins;
+    uint16_t bin = tx_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
     while(tx_table.bucket_len[bin] > 0) {
-      slot = tx_table.bucket_len[bin];
+      slot = tx_table.bucket_len[bin] - 1;
       // Copy from dst in tsk buf to "home" for that variable
       memcpy( tx_table.src[bin][slot],
               tx_table.dst[bin][slot],
               tx_table.size[bin][slot]
             );
+      LCG_PRINTF("%u.%u ",bin,slot);
+      LCG_PRINTF("Inserted %x to %x val %u => %u size %u\r\n",
+                                ((uint16_t *)tx_table.dst[bin][slot]),
+                                (uint16_t)tx_table.src[bin][slot],
+                                *((uint16_t *)tx_table.dst[bin][slot]),
+                                *((uint16_t *)tx_table.src[bin][slot]),
+                                ((uint16_t *)tx_table.size[bin][slot]));
       // Decrement number of items in bin
       tx_table.bucket_len[bin]--;
     }
   }
+  #if 0
+  // TODO take this out
+  for(int i = 0; i < NUM_BINS; i++) {
+    if((i & 0x7) == 0) {
+      printf("\r\n");
+    }
+    printf("%u ", tx_table.bucket_len[i]);
+  }
+  // TODO take this out
+  printf("\r\ntsk buff");
+  for(int i = 0; i < NUM_BINS; i++) {
+    if((i & 0x7) == 0) {
+      printf("\r\n");
+    }
+    printf("%u ", tsk_table.bucket_len[i]);
+  }
+  #endif
   tx_buf_level = 0;
 }
 

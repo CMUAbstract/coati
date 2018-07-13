@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "hash.h"
-
+#include "tx.h"
 #ifndef LIBCOATIGCC_ENABLE_DIAGNOSTICS
 #define LCG_PRINTF(...)
 #else
@@ -30,7 +30,6 @@ uint16_t check_table(table_t *table,void * addr) {
   if(table->bucket_len[bucket]) {
     for(int i = 0; i < table->bucket_len[bucket]; i++) {
       if(table->src[bucket][i] == addr) {
-        LCG_PRINTF("Found it!\r\n");
         return table->dst[bucket][i];
       }
     }
@@ -44,13 +43,12 @@ uint16_t check_table(table_t *table,void * addr) {
  * @ars pointer to table, pointer to table capacity, address to locate size of
  * var
  */
-uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap, 
+uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
                               void * addr,void * value,  size_t size) {
   uint16_t bucket;
   // Calc hash of address
   bucket = hash(addr);
   bucket &= BIN_MASK;
-  LCG_PRINTF("Bucket = %u\r\n",bucket);
   int i = 0;
   uint16_t temp;
   // Check for matching address in bucket

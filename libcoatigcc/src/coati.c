@@ -131,9 +131,9 @@ void tsk_commit_ph2() {
               tsk_table.dst[bin][slot],
               tsk_table.size[bin][slot]
             );
-      LCG_PRINTF("Inserted %x to %x val = %u\r\n",
+      LCG_PRINTF("Inserted %x to %x val = %x\r\n",
                                 *((uint16_t *)tsk_table.dst[bin][slot]),
-                                (uint16_t)tsk_table.src[bin][slot], 
+                                (uint16_t)tsk_table.src[bin][slot],
                                 *((uint16_t *)tsk_table.src[bin][slot]));
       // Decrement number of items in bin
       tsk_table.bucket_len[bin]--;
@@ -448,7 +448,6 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
     #endif // BUFFER_ALL
 
     case EV_PH1:
-
       #ifdef LIBCOATIGCC_BUFFER_ALL
       new_ev->in_ev = 0;
       new_ev->num_devv = ((ev_state *)curctx->extra_ev_state)->num_devv +
@@ -458,6 +457,7 @@ void commit_phase1(tx_state *new_tx, ev_state * new_ev,context_t *new_ctx) {
       // Copy the ev contents though
       *new_tx = *((tx_state *)thread_ctx->extra_state);
       new_ctx->task = thread_ctx->task;
+      LCG_PRINTF("Ev_ph1!\r\n");
       if(((tx_state *)thread_ctx->extra_state)->in_tx == 0) {
         LCG_PRINTF("Only committing ev!\r\n");
         new_ctx->commit_state = EV_ONLY;
@@ -615,6 +615,7 @@ void commit_phase2() {
         curctx->commit_state = NO_COMMIT;
         break;
       case EV_ONLY:
+        LCG_PRINTF("Ev phase 2!\r\n");
         #ifdef LIBCOATIGCC_BUFFER_ALL
         #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           #error "TEST_DEF_COUNT broken"

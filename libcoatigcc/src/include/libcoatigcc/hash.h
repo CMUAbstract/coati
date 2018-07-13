@@ -4,8 +4,8 @@
 
 #define NUM_BINS 32
 #define BIN_MASK 0x1F
-#define BIN_LEN  8
-#define BUF_LEN 250
+#define BIN_LEN  10
+#define BUF_LEN 400
 #define HASH_ERROR 0xffff
 
 typedef struct table_ {
