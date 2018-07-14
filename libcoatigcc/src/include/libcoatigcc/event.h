@@ -88,7 +88,7 @@ void *event_memcpy(void *dest, void *src, uint16_t num);
 
 #define EV_WRITE(x,val,type,is_ptr) \
     { type _temp_loc = val;\
-          write(&(x),sizeof(type),EVENT,_temp_loc);\
+          write(&(x),sizeof(type),EVENT,&_temp_loc);\
     }
 
 /*

@@ -118,8 +118,6 @@ void tx_commit_ph2() {
   LCG_PRINTF("Running tx_commit_ph2\r\n");
   // Copy all commit list entries
   while(tx_table.active_bins > 0)  {
-    // Decrement number of bins left to check
-    tx_table.active_bins--;
     uint16_t bin = tx_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
@@ -140,24 +138,9 @@ void tx_commit_ph2() {
       // Decrement number of items in bin
       tx_table.bucket_len[bin]--;
     }
+    // Decrement number of bins left to check
+    tx_table.active_bins--;
   }
-  #if 0
-  // TODO take this out
-  for(int i = 0; i < NUM_BINS; i++) {
-    if((i & 0x7) == 0) {
-      printf("\r\n");
-    }
-    printf("%u ", tx_table.bucket_len[i]);
-  }
-  // TODO take this out
-  printf("\r\ntsk buff");
-  for(int i = 0; i < NUM_BINS; i++) {
-    if((i & 0x7) == 0) {
-      printf("\r\n");
-    }
-    printf("%u ", tsk_table.bucket_len[i]);
-  }
-  #endif
   tx_buf_level = 0;
 }
 

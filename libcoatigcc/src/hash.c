@@ -56,6 +56,12 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
   while(i < table->bucket_len[bucket]) {
     if(table->src[bucket][i] == addr) {
       memcpy(table->dst[bucket][i], value, size);
+      // Leaving here for future debugging
+      #if 0
+      if(size != table->size[bucket][i]) {
+        printf("Error! size mismatch.\r\n");
+      }
+      #endif
       break;
     }
     i++;
@@ -83,6 +89,12 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
     // Need to have this add down here so we persist this stuff correctly
     memcpy(dirty_buf + temp, value, size);
     LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
+    // Leaving here for future debugging
+    #if 0
+    if(table->dst[bucket][i] + size != dirty_buf + *cap) {
+      printf("Assumptions on sizing failed!\r\n");
+    }
+    #endif
   }
   LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
   LCG_PRINTF("New level = %u\r\n",*cap);
@@ -181,6 +193,7 @@ uint16_t add_to_src_table(src_table *table, void *addr) {
   int flag = 0;
   while(i < table->bucket_len[bucket]) {
     if(table->src[bucket][i] == addr) {
+      // Found it
       flag = 1;
       break;
     }

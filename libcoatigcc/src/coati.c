@@ -117,8 +117,6 @@ static void tsk_commit_ph2(void);
 void tsk_commit_ph2() {
   // Copy all commit list entries
   LCG_PRINTF("In tsk commit\r\n");
-  // TODO take this check out
-  LCG_PRINTF("Active bin: %u\r\n",tsk_table.active_bins);
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
@@ -176,7 +174,7 @@ void * read(const void *addr, size_t size, acc_type acc) {
           // add the address to the read list
           read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
           read_cnt += num_evread;
-          if(read_cnt >= NUM_DIRTY_ENTRIES) {
+          if(read_cnt >= NUM_DIRTY_ENTRIES - 1) {
             int test = 0;
             // A bit of a cheat to keep the usual overhead low if you're
             // accessing the same memory in a task. This could all be obviated
@@ -335,37 +333,28 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
             #endif //BUFFER_ALL
             // Check if addr is already in buffer
             index = ev_find(addr);
-            // TODO fix this copy nonsense
             if(index > -1) {
-              if (size == sizeof(uint8_t)) {
-                *((uint8_t *) ev_dst[index]) = (uint8_t) value;
-              } else if(size == sizeof(uint16_t)) {
-                *((uint16_t *) (ev_dst[index]) ) = (uint16_t) value;
-              } else if(size == sizeof(uint32_t)) {
-                *((uint32_t *) (ev_dst[index])) = (uint32_t) value;
-              } else {
-                  printf("Ev Error! invalid size!\r\n");
-                  while(1);
+              memcpy(ev_dst[index], value, size);
+              // Left here for future error checking
+              #if 0
+              if(ev_dst[index] > (ev_buf + BUF_SIZE) || ev_dst[index] < ev_buf) {
+                printf("Error! Invalid destination!\r\n");
               }
+              #endif
             }
             else {
                 void * dst = ev_buf_alloc(addr, size);
-                if(dst) {
-                  if (size == sizeof(char)) {
-                    *((uint8_t *) dst) = (uint8_t) value;
-                  } else if(size == sizeof(uint16_t)) {
-                    *((uint16_t *) dst) = (uint16_t) value;
-                  } else if(size == sizeof(uint32_t)) {
-                    *((uint32_t *) dst) = (uint32_t) value;
-                  } else {
-                    printf("Ev Error! invalid size!\r\n");
-                    while(1);
-                  }
-                } else {
-                    // Error! we ran out of space
-                    printf("Ev Error! out of space!\r\n");
-                    while(1);
-                }
+                memcpy(dst, value, size);
+                uint16_t num_vars = 0;
+                num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv
+                          + num_evbe;
+              
+              // Left here for future error checking
+              #if 0
+              if(dst > (ev_buf + BUF_SIZE) || dst < ev_buf) {
+                printf("Error! Invalid destination!\r\n");
+              }
+              #endif
             }
             break;
         case TX:
@@ -560,6 +549,12 @@ void commit_phase2() {
         break;
       case EV_FUTURE:
         ((ev_state *)curctx->extra_ev_state)->ev_need_commit = 1;
+        // Need to clear tsk_buf since we're restarting the interrupted task
+        // TODO figure out if this is a point of slowdown
+        for(int i = 0; i < NUM_BINS; i++) {
+          tsk_table.bucket_len[i] = 0;
+        }
+        tsk_buf_level = 0;
         curctx->commit_state = NO_COMMIT;
         break;
       #endif // BUFFER_ALL

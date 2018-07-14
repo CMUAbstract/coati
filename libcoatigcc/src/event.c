@@ -223,18 +223,18 @@ void *  ev_get_dst(void * addr) {
  */
 void ev_commit_ph2() {
     // Copy all tx buff entries to main memory
-    LCG_PRINTF("Running ev_commit! should commit %u\r\n",
+    LCG_PRINTF("Ev commit %u\r\n",
     ((ev_state*)(curctx->extra_ev_state))->num_devv);
     while(((ev_state *)(curctx->extra_ev_state))->num_devv > 0) {
-        uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv;
-        memcpy( ev_src[num_devv -1],
-                ev_dst[num_devv - 1],
-                ev_size[num_devv - 1]
+        uint16_t num_devv = ((ev_state *)(curctx->extra_ev_state))->num_devv - 1;
+        memcpy( ev_src[num_devv],
+                ev_dst[num_devv],
+                ev_size[num_devv]
         );
-        LCG_PRINTF("Copying %i th time to %x from %x val %c \r\n", num_devv-1,
-        ev_src[num_devv-1],
-        ev_dst[num_devv - 1],
-        *((char *)ev_src[num_devv-1]));
+        LCG_PRINTF("Copying %i th time to %x from %x val %c \r\n", num_devv,
+        ev_src[num_devv],
+        ev_dst[num_devv ],
+        *((char *)ev_src[num_devv]));
         ((ev_state *)(curctx->extra_ev_state))->num_devv--;
     }
 #ifdef LIBCOATIGCC_BUFFER_ALL
@@ -255,11 +255,10 @@ void * ev_buf_alloc(void * addr, size_t size) {
     uint16_t num_vars = 0;
     num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv + num_evbe;
     if(num_vars) {
-        new_ptr = (uint8_t *) ev_dst[num_vars - 1] +
-        ev_size[num_vars - 1];
+        new_ptr = (uint16_t) ev_dst[num_vars - 1] + ev_size[num_vars - 1];
     }
     else {
-        new_ptr = (uint8_t *) ev_buf;
+        new_ptr = (uint16_t) ev_buf;
     }
     // Fix alignment struggles
     if(size == 2) {
