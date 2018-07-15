@@ -585,8 +585,6 @@ void commit_phase2() {
           add_to_histogram(item_count);
         else
           instrument = 1;
-        }
-        //printf("0,0,%u\r\n",item_count);
         #endif
         // Commit last task
         tsk_commit_ph2();
