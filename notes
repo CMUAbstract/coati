@@ -1,6 +1,6 @@
 Here is the set of hash table configurations for each of the benchmarks
    BINS BIN_LEN  BUF_LEN
-BC   16    16      250
+BC   16    3      100
 
 AR   16    16      250
 
