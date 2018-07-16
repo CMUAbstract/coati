@@ -231,12 +231,14 @@ void * read(const void *addr, size_t size, acc_type acc) {
             // Add to read filter for tx
             LCG_PRINTF("TX READ %x\r\n",addr);
             // Don't record read/write lists unless we're monitoring everything
+            #ifdef LIBCOATIGCC_BUFFER_ALL
             #ifdef LIBCOATIGCC_SER_TX_AFTER
             test = add_to_src_table(&tx_read_table, addr);
             if(test) {
               printf("Error adding to tx_read_table!\r\n");
             }
             #endif // SER_TX_AFTER
+            #endif //Buffer all
             // check tsk buf
             flag = check_table(&tsk_table, addr);
             if(flag != HASH_ERROR) {
