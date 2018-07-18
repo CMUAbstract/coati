@@ -50,7 +50,7 @@ typedef struct _tx_state {
 
 // Extra defs for instrumentation
 // These disable the transition timer so we can get accurate delay numbers
-#ifdef LIBCOATIGCC_TEST_TIMING
+#if defined(LIBCOATIGCC_TEST_TIMING) || defined(LIBCOATIGCC_TEST_DEF_COUNT)
 #define NI_TX_END_TRANSITION_TO(task) \
     SET_TX_TRANS \
     TX_TIMER_STOP \

@@ -16,13 +16,14 @@
 #define LCG_PRINTF printf
 #endif
 
-__nv uint8_t ev_buf[BUF_SIZE];
-__nv void * ev_src[NUM_DIRTY_ENTRIES];
-__nv void * ev_dst[NUM_DIRTY_ENTRIES];
-__nv size_t ev_size[NUM_DIRTY_ENTRIES];
+
+__nv uint8_t ev_buf[EV_BUF_SIZE];
+__nv void * ev_src[EV_NUM_DIRTY_ENTRIES];
+__nv void * ev_dst[EV_NUM_DIRTY_ENTRIES];
+__nv size_t ev_size[EV_NUM_DIRTY_ENTRIES];
 #ifdef LIBCOATIGCC_BUFFER_ALL
-__nv void * ev_read_list[NUM_DIRTY_ENTRIES];
-__nv void * ev_write_list[NUM_DIRTY_ENTRIES];
+__nv void * ev_read_list[EV_NUM_DIRTY_ENTRIES];
+__nv void * ev_write_list[EV_NUM_DIRTY_ENTRIES];
 
 __nv task_t * cur_tx_start;
 
@@ -266,9 +267,9 @@ void * ev_buf_alloc(void * addr, size_t size) {
       while(new_ptr & 0x11)
         new_ptr++;
     }
-    if(new_ptr + size > (unsigned) (ev_buf + BUF_SIZE)) {
+    if(new_ptr + size > (unsigned) (ev_buf + EV_BUF_SIZE)) {
         LCG_PRINTF("asking for %u, only have %u \r\n", new_ptr + size,
-        (unsigned) (ev_buf + BUF_SIZE));
+        (unsigned) (ev_buf + EV_BUF_SIZE));
         return NULL;
     }
     else {

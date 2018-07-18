@@ -25,6 +25,18 @@
   #define BUF_SIZE LIBCOATIGCC_CTX_BUF_SIZE
 #endif
 
+#ifndef LIBCOATIGCC_TX_BUF_SIZE
+  #define TX_BUF_SIZE BUF_SIZE
+#else
+  #define TX_BUF_SIZE LIBCOATIGCC_TX_BUF_SIZE
+#endif
+
+#ifndef LIBCOATIGCC_PER_TX_DIRTY_ENTRIES
+  #define TX_NUM_DIRTY_ENTRIES NUM_DIRTY_ENTRIES
+#else
+  #define TX_NUM_DIRTY_ENTRIES LIBCOATIGCC_PER_TX_DIRTY_ENTRIES
+#endif
+
 typedef void (task_func_t)(void);
 typedef uint32_t task_mask_t;
 typedef uint16_t field_mask_t;
@@ -271,7 +283,6 @@ void transition_to(task_t *task);
   printf("Events time: %u + %u\r\n",overflows_ev, ev_ticks);
 #elif defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_TEST_DEF_COUNT)
   #define APP_FINISHED \
-  #pragma message ("Either test_count or test_def_count defined!\r\n")\
   printf("Histogram:\r\n"); \
   print_histogram();
 #endif

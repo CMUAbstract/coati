@@ -231,24 +231,27 @@ void * read(const void *addr, unsigned size, acc_type acc) {
         case EVENT:
             // Only add to read list if we're buffering all updates
             #ifdef LIBCOATIGCC_BUFFER_ALL
-            // add the address to the read list
-            read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
-            read_cnt += num_evread;
-            if(read_cnt >= NUM_DIRTY_ENTRIES) {
-              int test = 0;
-              // A bit of a cheat to keep the usual overhead low if you're
-              // accessing the same memory in a task. This could all be obviated
-              // by a compiler pass that determined the maximum number of reads
-              // that are possible.
-              test = check_list(ev_read_list, read_cnt, addr);
-              if(!test) {
-                printf("Out of space in ev read list!\r\n");
-                while(1);
+            if(((tx_state *)thread_ctx->extra_state)->in_tx &&
+               ((tx_state *)thread_ctx->extra_state)->serialize_after == 0) {
+              // add the address to the read list
+              read_cnt = ((ev_state *)curctx->extra_ev_state)->num_read;
+              read_cnt += num_evread;
+              if(read_cnt >= EV_NUM_DIRTY_ENTRIES) {
+                int test = 0;
+                // A bit of a cheat to keep the usual overhead low if you're
+                // accessing the same memory in a task. This could all be obviated
+                // by a compiler pass that determined the maximum number of reads
+                // that are possible.
+                test = check_list(ev_read_list, read_cnt, addr);
+                if(!test) {
+                  printf("Out of space in ev read list!\r\n");
+                  while(1);
+                }
               }
-            }
-            else {
-              ev_read_list[read_cnt] = (void *) addr;
-              num_evread++;
+              else {
+                ev_read_list[read_cnt] = (void *) addr;
+                num_evread++;
+              }
             }
             #endif // BUFFER_ALL
 
@@ -292,37 +295,39 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             LCG_PRINTF("TX READ %x\r\n",addr);
             // Don't record read/write lists unless we're monitoring everything
             #ifdef LIBCOATIGCC_BUFFER_ALL
-            read_cnt = ((tx_state *)curctx->extra_state)->num_read;
-            //printf("RC, NUM_TXR: %u %u\r\n",read_cnt, num_txread);
-            read_cnt += num_txread;
-            #ifndef LIBCOATIGCC_CHECK_ALL_TX
-            if(read_cnt >= NUM_DIRTY_ENTRIES) {
-              int test = 0;
-              test = check_list(tx_read_list, read_cnt, addr);
-              if(!test) {
-                printf("Out of space in tx read list!\r\n");
-                while(1);
+            if(((tx_state *)curctx->extra_state)->serialize_after) {
+              read_cnt = ((tx_state *)curctx->extra_state)->num_read;
+              //printf("RC, NUM_TXR: %u %u\r\n",read_cnt, num_txread);
+              read_cnt += num_txread;
+              #ifndef LIBCOATIGCC_CHECK_ALL_TX
+              if(read_cnt >= TX_NUM_DIRTY_ENTRIES) {
+                int test = 0;
+                test = check_list(tx_read_list, read_cnt, addr);
+                if(!test) {
+                  printf("Out of space in tx read list!\r\n");
+                  while(1);
+                }
               }
-            }
-            else {
-              tx_read_list[read_cnt] = (void *) addr;
-              num_txread++;
-            }
-            #else
-              int test = 0;
-              test = check_list(tx_read_list,read_cnt,addr);
-              /*if(test) {
-                printf("Seen before!\r\n");
-              }*/
-              if(!test && (read_cnt >= NUM_DIRTY_ENTRIES)) {
-                printf("Really out of space in tx read list\r\n");
-                while(1);
-              }
-              if(!test) {
+              else {
                 tx_read_list[read_cnt] = (void *) addr;
                 num_txread++;
               }
-            #endif // CHECK_ALL_TX
+              #else
+                int test = 0;
+                test = check_list(tx_read_list,read_cnt,addr);
+                /*if(test) {
+                  printf("Seen before!\r\n");
+                }*/
+                if(!test && (read_cnt >= TX_NUM_DIRTY_ENTRIES)) {
+                  printf("Really out of space in tx read list\r\n");
+                  while(1);
+                }
+                if(!test) {
+                  tx_read_list[read_cnt] = (void *) addr;
+                  num_txread++;
+                }
+              #endif // CHECK_ALL_TX
+            }
             #endif // BUFFER_ALL
             // check tsk buf
             index = tsk_find(addr);
@@ -393,26 +398,31 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
         case EVENT:
             LCG_PRINTF("Running event write!\r\n");
             #ifdef LIBCOATIGCC_BUFFER_ALL
-            // add to write list
-            write_cnt = ((ev_state *)curctx->extra_ev_state)->num_write;
-            write_cnt += num_evwrite;
-            if(write_cnt >= NUM_DIRTY_ENTRIES) {
-              int test = 0;
-              // A bit of a cheat to keep the usual overhead low if you're
-              // accessing the same memory in a task. This could all be obviated
-              // by a compiler pass that determined the maximum number of reads
-              // that are possible.
-              test = check_list(ev_write_list, write_cnt, addr);
-              if(!test) {
-                printf("Out of space in ev write list!\r\n");
-                while(1);
+            // check if we're in a tx and if we're *not* running 
+            // serialize tx after
+            if(((tx_state *)thread_ctx->extra_state)->in_tx &&
+               ((tx_state *)thread_ctx->extra_state)->serialize_after) {
+              // add to write list
+              write_cnt = ((ev_state *)curctx->extra_ev_state)->num_write;
+              write_cnt += num_evwrite;
+              if(write_cnt >= EV_NUM_DIRTY_ENTRIES) {
+                int test = 0;
+                // A bit of a cheat to keep the usual overhead low if you're
+                // accessing the same memory in a task. This could all be obviated
+                // by a compiler pass that determined the maximum number of reads
+                // that are possible.
+                test = check_list(ev_write_list, write_cnt, addr);
+                if(!test) {
+                  printf("Out of space in ev write list!\r\n");
+                  while(1);
+                }
+              }
+              else {
+                ev_write_list[write_cnt] = (void *) addr;
+                num_evwrite++;
               }
             }
-            else {
-              ev_write_list[write_cnt] = (void *) addr;
-              num_evwrite++;
-            }
-            #endif //BUFFER_ALL
+              #endif //BUFFER_ALL
             // Check if addr is already in buffer
             index = ev_find(addr);
             if(index > -1) {
@@ -449,37 +459,38 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             break;
         case TX:
             #ifdef LIBCOATIGCC_BUFFER_ALL
-            // Inc number of variables written
-            write_cnt = ((tx_state *)curctx->extra_state)->num_write;
-            write_cnt += num_txwrite;
-            #ifndef LIBCOATIGCC_CHECK_ALL_TX
-            if(write_cnt >= NUM_DIRTY_ENTRIES) {
-              int test = 0;
-              test = check_list(tx_write_list, write_cnt, addr);
-              if(!test) {
-                printf("Out of space in tx write list!\r\n");
-                while(1);
+            // if we're not running serialize tx after
+            if(((tx_state *)curctx->extra_state)->serialize_after == 0) {
+              // Inc number of variables written
+              write_cnt = ((tx_state *)curctx->extra_state)->num_write;
+              write_cnt += num_txwrite;
+              #ifndef LIBCOATIGCC_CHECK_ALL_TX
+              if(write_cnt >= NUM_DIRTY_ENTRIES) {
+                int test = 0;
+                test = check_list(tx_write_list, write_cnt, addr);
+                if(!test) {
+                  printf("Out of space in tx write list!\r\n");
+                  while(1);
+                }
               }
-            }
-            else {
-              tx_write_list[write_cnt] = (void *) addr;
-              num_txwrite++;
-            }
-            #else
-              int test = 0;
-              test = check_list(tx_write_list,write_cnt,addr);
-              if(!test && (write_cnt >= NUM_DIRTY_ENTRIES)) {
-                printf("Really out of space in tx write %u\r\n", addr);
-                /*for(int i = 0; i < write_cnt; i++) {
-                  printf("%u\r\n",tx_write_list[i]);
-                }*/
-                while(1);
-              }
-              if(!test) {
+              else {
                 tx_write_list[write_cnt] = (void *) addr;
                 num_txwrite++;
               }
+              #else
+                int test = 0;
+                test = check_list(tx_write_list,write_cnt,addr);
+                if(!test && (write_cnt >= NUM_DIRTY_ENTRIES)) {
+                  printf("Really out of space in tx write %u\r\n", addr);
+                  while(1);
+                }
+                if(!test) {
+                  tx_write_list[write_cnt] = (void *) addr;
+                  num_txwrite++;
+                }
+            
             #endif // CHECK_ALL_TX
+            }
             #endif // BUFFER_ALL
 
             // Intentional fall through
@@ -674,8 +685,11 @@ void commit_phase2() {
         case TSK_COMMIT:
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           //printf("%u,0,0\r\n",num_dtv);
-          if(instrument)
+          if(instrument) {
+            #ifdef LIBCOATIGCC_TSK_DEF_COUNT
             add_to_histogram(num_dtv);
+            #endif
+          }
           else
             instrument = 1;
           #endif
@@ -700,8 +714,11 @@ void commit_phase2() {
         case TSK_IN_TX_COMMIT:
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
           //printf("%u,0,0\r\n",num_dtv);
-          if(instrument)
+          if(instrument) {
+            #ifdef LIBCOATIGCC_TSK_DEF_COUNT
             add_to_histogram(num_dtv);
+            #endif
+          }
           else
             instrument = 1;
           #endif
@@ -717,30 +734,43 @@ void commit_phase2() {
         case TX_COMMIT:
           #ifdef LIBCOATIGCC_BUFFER_ALL
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-          item_count = ((ev_state *)curctx->extra_ev_state)->num_devv + num_dtv
-                      + ((tx_state *)curctx->extra_state)->num_dtxv;
-          if(!((tx_state *)curctx->extra_state)->in_tx) {
-            //printf("0,0,%u\r\n",item_count);
-          if(instrument)
-            add_to_histogram(item_count);
-          else
-            instrument = 1;
-          }
+            #ifdef LIBCOATIGCC_TSK_DEF_COUNT
+            item_count = num_dtv;
+            if(!((tx_state *)curctx->extra_state)->in_tx) {
+              if(instrument)
+                add_to_histogram(item_count);
+              else
+                instrument = 1;
+            }
+            #endif 
 
           #endif
           // Finish committing current tsk
           tsk_in_tx_commit_ph2();
+          
+          #if defined(LIBCOATIGCC_TEST_DEF_COUNT) && \
+              !defined(LIBCOATIGCC_TSK_DEF_COUNT)
+          item_count = ((ev_state *)curctx->extra_ev_state)->num_devv
+                      + ((tx_state *)curctx->extra_state)->num_dtxv;
+          if(!((tx_state *)curctx->extra_state)->in_tx) {
+            if(instrument)
+              add_to_histogram(item_count);
+            else
+              instrument = 1;
+          }
+          #endif
           // Changes commit_state to any one of the following
           tx_commit_ph1_5();
           #else
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
-          item_count = num_dtv;
-          if(instrument)
-            add_to_histogram(item_count);
-          else
-            instrument = 1;
-          }
-          //printf("0,0,%u\r\n",item_count);
+            #ifdef LIBCOATIGCC_TSK_DEF_COUNT
+            item_count = num_dtv;
+            if(instrument)
+              add_to_histogram(item_count);
+            else
+              instrument = 1;
+            }
+            #endif
           #endif
           // Commit last task
           tsk_commit_ph2();
@@ -770,6 +800,7 @@ void commit_phase2() {
         case EV_ONLY:
           #ifdef LIBCOATIGCC_BUFFER_ALL
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+            #ifdef LIBCOATIGCC_EV_DEF_COUNT
           if(((tx_state *)curctx->extra_state)->in_tx == 0) {
             item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
           if(instrument)
@@ -779,19 +810,22 @@ void commit_phase2() {
             //printf("0,%u,0\r\n",item_count);
           }
           #endif
+          #endif
           ((tx_state *)curctx->extra_state)->num_read = 0;
           ((tx_state *)curctx->extra_state)->num_write = 0;
           ((ev_state *)curctx->extra_ev_state)->num_read = 0;
           ((ev_state *)curctx->extra_ev_state)->num_write = 0;
           #else
           #ifdef LIBCOATIGCC_TEST_DEF_COUNT
+            #ifdef LIBCOATIGCC_EV_DEF_COUNT
           item_count = ((ev_state *)curctx->extra_ev_state)->num_devv;
           if(instrument)
             add_to_histogram(item_count);
           else
             instrument = 1;
           //printf("0,%u,0\r\n",item_count);
-          #endif
+          #endif // EV_DEF_COUNT
+          #endif // TEST_DEF_COUNT
           #endif //BUFFER_ALL
           ev_commit_ph2();
           curctx->commit_state = NO_COMMIT;

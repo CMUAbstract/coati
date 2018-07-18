@@ -22,15 +22,15 @@
 #include "filter.h"
 #include "event.h"
 
-__nv uint8_t tx_buf[BUF_SIZE];
+__nv uint8_t tx_buf[TX_BUF_SIZE];
 
-__nv void * tx_src[NUM_DIRTY_ENTRIES];
-__nv void * tx_dst[NUM_DIRTY_ENTRIES];
-__nv size_t tx_size[NUM_DIRTY_ENTRIES];
+__nv void * tx_src[TX_NUM_DIRTY_ENTRIES];
+__nv void * tx_dst[TX_NUM_DIRTY_ENTRIES];
+__nv size_t tx_size[TX_NUM_DIRTY_ENTRIES];
 
 #ifdef LIBCOATIGCC_BUFFER_ALL
-__nv void * tx_read_list[NUM_DIRTY_ENTRIES];
-__nv void * tx_write_list[NUM_DIRTY_ENTRIES];
+__nv void * tx_read_list[TX_BUF_SIZE];
+__nv void * tx_write_list[TX_BUF_SIZE];
 
 // volatile number of reads the transaction has performed
 volatile uint16_t num_txread = 0;
@@ -141,14 +141,12 @@ void *  tx_get_dst(void * addr) {
 void tsk_in_tx_commit_ph2() {
   //uint16_t num_tx_vars =((tx_state *)(curctx->extra_state))->num_dtxv;
   uint16_t i = 0;
-  //LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);
   LCG_PRINTF("tx inner commit, num_dtv = %x\r\n",num_dtv);
   // Cycle through all the variables to commit
   while(num_dtv > 0) {
     LCG_PRINTF("%u num_dtv ",num_dtv);
     void *dst = tx_get_dst(tsk_src[num_dtv - 1]);
     if(dst != NULL) {
-        //LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
         LCG_PRINTF("Copying %x from %x to %x, %x bytes \r\n",
                     tsk_src[num_dtv -1],
                     ((uint8_t *)tsk_dst[num_dtv - 1]),
@@ -159,7 +157,7 @@ void tsk_in_tx_commit_ph2() {
                 tsk_size[num_dtv -1]
               );
     }
-    else{
+    else {
       LCG_PRINTF("Not found! allocing!\r\n");
       void *dst_alloc = tx_buf_alloc(tsk_src[num_dtv -1],
                                      tsk_size[num_dtv -1]);
@@ -193,6 +191,8 @@ void tsk_in_tx_commit_ph2() {
 void * tx_buf_alloc(void * addr, size_t size) {
   uint16_t new_ptr;
   uint16_t index = ((tx_state *)curctx->extra_state)->num_dtxv;
+  //TODO take this out
+  //uint16_t inc = 0;
   if(index) {
     new_ptr = (uint16_t) tx_dst[index - 1] +
     tx_size[index - 1];
@@ -202,14 +202,18 @@ void * tx_buf_alloc(void * addr, size_t size) {
   }
   // Fix alignment struggles
   if(size == 2) {
-    while(new_ptr & 0x1)
+    while(new_ptr & 0x1) {
       new_ptr++;
+      //inc++;
+    }
   }
   if(size == 4) {
-    while(new_ptr & 0x11)
+    while(new_ptr & 0x11) {
       new_ptr++;
+      //inc++;
+    }
   }
-  if(new_ptr + size > (unsigned) (tx_buf + BUF_SIZE)) {
+  if(new_ptr + size > (unsigned) (tx_buf + TX_BUF_SIZE)) {
     return NULL;
   }
   else {
@@ -218,6 +222,9 @@ void * tx_buf_alloc(void * addr, size_t size) {
     tx_size[index] = size;
     ((tx_state *)curctx->extra_state)->num_dtxv++;
   }
+  // TODO take this out
+  LCG_PRINTF("s = %u, inc = %ufill = %u\r\n",size,inc,(new_ptr - (unsigned) tx_buf));
+  LCG_PRINTF("buf size = %u\r\n",TX_BUF_SIZE);
   return (void *) new_ptr;
 }
 

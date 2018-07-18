@@ -9,7 +9,8 @@
 #define THREAD 0
 #define EV  1
 #define NUM_PRIO_LEVELS 2
-
+#define EV_NUM_DIRTY_ENTRIES 32
+#define EV_BUF_SIZE 64 
 typedef struct _ev_state {
     uint16_t num_devv;
 #ifdef LIBCOATIGCC_BUFFER_ALL
@@ -59,7 +60,7 @@ extern volatile uint16_t num_evread;
 extern volatile uint16_t num_evwrite;
 #endif // BUFFER_ALL
 
-extern __nv uint8_t ev_buf[BUF_SIZE];
+extern __nv uint8_t ev_buf[];
 extern __nv void * ev_src[];
 extern __nv void * ev_dst[];
 extern __nv size_t ev_size[];
