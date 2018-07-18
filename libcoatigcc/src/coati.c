@@ -15,6 +15,7 @@
 #include "tx.h"
 #include "event.h"
 #include "types.h"
+#include "undo.h"
 
 #ifdef LIBCOATIGCC_TEST_TIMING
 #pragma message "setup timing test"
@@ -994,6 +995,8 @@ int main() {
     #pragma message ("Delaying for def test")
     //__delay_cycles(4000000);
     #endif
+    // Restore log if there's anything in it
+    restore_log();
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL
     // Check if we're in an event
