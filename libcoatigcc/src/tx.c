@@ -21,6 +21,7 @@
 #include "tx.h"
 #include "filter.h"
 #include "event.h"
+#include "undo.h"
 
 __nv uint8_t tx_buf[BUF_SIZE];
 __nv uint16_t tx_buf_level = 0;
@@ -78,44 +79,37 @@ void tx_begin() {
 void tsk_in_tx_commit_ph2() {
   uint16_t i = 0;
   LCG_PRINTF("tsk_in_tx commit phase2\r\n");
-  volatile uint16_t *vals[2];
     // Cycle through all the variables to commit and write back to tx_buff
+  uint8_t *bucket_len;
+  bucket_len = tsk_table.bucket_len;
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
-    //TODO improve pointer usage here
-    vals[0] = &(tsk_table.bucket_len[bin]);
-    vals[1] = &tx_buf_level;
     // We're using a longer window for the log so that though we'll lose and
     // entire bucket of commit, we won't have to log so darn often
-    //TODO take this out
-    log_start(vals,2);
-    // Walk through each slot in each bin w/ at least one value slotted in
-    while(tsk_table.bucket_len[bin] > 0) {
-      slot = tsk_table.bucket_len[bin] - 1;
-      uint16_t flag = 0;
-      uint16_t shift = (bin << LOG_BIN_LEN_PLUS) + slot;
-      // Add this to the tx table
-      /*flag = add_to_table(&tx_table, tx_buf, &tx_buf_level,
-              (tsk_table.src[bin][slot]),(tsk_table.dst[bin][slot]), 
-              (tsk_table.size[bin][slot]));*/
-      flag = add_to_table(&tx_table, tx_buf, &tx_buf_level,
-              *((void ***)tsk_table.src + shift),*((void ***)tsk_table.dst + shift), 
-              *((void ***)tsk_table.size + shift));
-      LCG_PRINTF("Inserted %x to %x val = %x\r\n",
-                                *((uint16_t *)tsk_table.dst[bin][slot]),
-                                (uint16_t)tsk_table.src[bin][slot],
-                                *((uint16_t *)tsk_table.src[bin][slot]));
-      if(flag) {
-        printf("Error allocing tx buf\r\n");
-        while(1);
+      LOG_START(*(bucket_len + bin), tx_buf_level);
+      while(*(bucket_len + bin) > 0) {
+        slot = *(bucket_len + bin) - 1;
+        uint16_t flag = 0;
+        uint16_t shift = (bin << LOG_BIN_LEN_PLUS) + slot;
+        // Add this to the tx table
+        flag = add_to_table(&tx_table, tx_buf, &tx_buf_level,
+                *((void ***)tsk_table.src + shift),*((void ***)tsk_table.dst + shift), 
+                *((size_t *)tsk_table.size + shift));
+        LCG_PRINTF("Inserted %x to %x val = %x\r\n",
+                                  *((uint16_t *)tsk_table.dst[bin][slot]),
+                                  (uint16_t)tsk_table.src[bin][slot],
+                                  *((uint16_t *)tsk_table.src[bin][slot]));
+        if(flag) {
+          printf("Error allocing tx buf\r\n");
+          while(1);
+        }
+        // Decrement number of items in bin we're safe to do this here and not
+        // overrun tx_buf_level because we're double buffering it, but only for
+        // that reason!
+        (*(bucket_len + bin))--;
       }
-      // Decrement number of items in bin we're safe to do this here and not
-      // overrun tx_buf_level because we're double buffering it, but only for
-      // that reason!
-      tsk_table.bucket_len[bin]--;
-    }
-      log_end();
+      LOG_END;
     // Decrement number of bins left to check
     tsk_table.active_bins--;
   }
@@ -129,23 +123,21 @@ void tsk_in_tx_commit_ph2() {
  */
 void tx_commit_ph2() {
   LCG_PRINTF("Running tx_commit_ph2\r\n");
+  uint8_t *bucket_len;
+  bucket_len = tx_table.bucket_len;
   // Copy all commit list entries
   while(tx_table.active_bins > 0)  {
     uint16_t bin = tx_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
-    while(tx_table.bucket_len[bin] > 0) {
-      slot = tx_table.bucket_len[bin] - 1;
+    while(*(bucket_len + bin) > 0) {
+      slot = *(bucket_len + bin) - 1;
       uint16_t shift = (bin << LOG_BIN_LEN_PLUS) + slot;
       // Copy from dst in tsk buf to "home" for that variable
       memcpy( *((void ***)tx_table.src + shift),
               *((void ***)tx_table.dst + shift),
-              *((void ***)tx_table.size + shift)
+              *((size_t *)tx_table.size + shift)
             );
-      /*memcpy( tx_table.src[bin][slot],
-              tx_table.dst[bin][slot],
-              tx_table.size[bin][slot]
-            );*/
       LCG_PRINTF("%u.%u ",bin,slot);
       LCG_PRINTF("Inserted %x to %x val %u => %u size %u\r\n",
                                 ((uint16_t *)tx_table.dst[bin][slot]),
@@ -154,7 +146,7 @@ void tx_commit_ph2() {
                                 *((uint16_t *)tx_table.src[bin][slot]),
                                 ((uint16_t *)tx_table.size[bin][slot]));
       // Decrement number of items in bin
-      tx_table.bucket_len[bin]--;
+      (*(bucket_len + bin))--;
     }
     // Decrement number of bins left to check
     tx_table.active_bins--;

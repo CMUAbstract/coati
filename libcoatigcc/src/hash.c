@@ -56,6 +56,8 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
   while(i < table->bucket_len[bucket]) {
     if(table->src[bucket][i] == addr) {
       memcpy(table->dst[bucket][i], value, size);
+      // we return here if we've found the value in the table
+      //return 0;
       // Leaving here for future debugging
       #if 0
       if(size != table->size[bucket][i]) {

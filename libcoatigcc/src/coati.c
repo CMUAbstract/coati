@@ -118,30 +118,28 @@ static void tsk_commit_ph2(void);
 void tsk_commit_ph2() {
   // Copy all commit list entries
   LCG_PRINTF("In tsk commit\r\n");
+  uint8_t *bucket_len;
+  bucket_len = tsk_table.bucket_len;
   while(tsk_table.active_bins > 0)  {
     uint16_t bin = tsk_table.active_bins - 1;
     uint16_t slot;
     // Walk through each slot in each bin w/ at least one value slotted in
-    while(tsk_table.bucket_len[bin] > 0) {
-      slot = tsk_table.bucket_len[bin] - 1;
+    while(*(bucket_len + bin) > 0) {
+      slot = *(bucket_len + bin) - 1;
       // Copy from dst in tsk buf to "home" for that variable
       uint16_t shift = (bin << LOG_BIN_LEN_PLUS) + slot;
       // TODO take this out
       LCG_PRINTF("Shift = %u = %u << %u + %u\r\n",shift, bin, LOG_BIN_LEN_PLUS, slot);
       memcpy( *((void ***)tsk_table.src + shift),
               *((void ***)tsk_table.dst + shift),
-              *((void ***)tsk_table.size + shift)
+              *((size_t *)tsk_table.size + shift)
             );
-      /*memcpy( tsk_table.src[bin][slot],
-              tsk_table.dst[bin][slot],
-              tsk_table.size[bin][slot]
-            );*/
       LCG_PRINTF("Inserted %x to %x val = %x\r\n",
                                 *((uint16_t *)tsk_table.dst[bin][slot]),
                                 (uint16_t)tsk_table.src[bin][slot],
                                 *((uint16_t *)tsk_table.src[bin][slot]));
       // Decrement number of items in bin
-      tsk_table.bucket_len[bin]--;
+      (*(bucket_len + bin))--;
       LCG_PRINTF("tsk_comm buf level:%u\r\n",tsk_buf_level);
     }
     // Decrement number of bins left to check
@@ -357,7 +355,7 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
                 uint16_t num_vars = 0;
                 num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv
                           + num_evbe;
-              
+
               // Left here for future error checking
               #if 0
               if(dst > (ev_buf + BUF_SIZE) || dst < ev_buf) {
@@ -810,13 +808,13 @@ int main() {
     _numBoots++;
     // TODO take this out
     __delay_cycles(4000000);
-    printf("Go!\r\n");
+    //printf("Go!\r\n");
     #ifdef LIBCOATIGCC_ENABLE_DIAGNOSTICS
     __delay_cycles(4000000);
     #endif
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
     // Restore undo log
-    restore_log();
+    LOG_RESTORE;
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL
     // Check if we're in an event

@@ -2,23 +2,23 @@
 #define _UNDO_LOG_
 // General undo log for uint16_t's
 
+extern uint16_t old_bucket_len;
+extern uint16_t old_tx_buf_len;
+extern uint8_t log_need_commit;
 
-/*
- * @brief Restores all the values in the undo log and clears internal
- * need_commit flag
- */
-void restore_log();
+#define LOG_START(bucket, buf) \
+  old_bucket_len = bucket; \
+  old_tx_buf_len = buf; \
+  log_need_commit = 1;
 
-/*
- * @brief Dumps the values pointed to by the array, vals, of length len into the
- * undo log
- * @return returns 0 if values were correctly added to undo log, 1, if not
- */
-uint8_t log_start(uint16_t **vals, uint16_t len);
+#define LOG_END \
+  log_need_commit = 0;
 
-/*
- * @brief Clears need_commit flag
- */
-void log_end();
+#define LOG_RESTORE \
+  if(log_need_commit) { \
+    tsk_table.bucket_len[tsk_table.active_bins - 1] = old_bucket_len;\
+    tx_buf_level = old_tx_buf_len;\
+  }\
+  log_need_commit = 0;
 
 #endif
