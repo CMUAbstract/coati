@@ -9,6 +9,7 @@ OBJECTS += \
   top_half.o \
 	coati.o \
   tx.o \
+  undo.o \
   filter.o\
   event.o \
   hash.o \

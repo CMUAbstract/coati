@@ -72,7 +72,7 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
       printf("Error! overflowed bin! %u %u\r\n", i, table->bucket_len[bucket]);
       return 1;
     }
-    (table->src[bucket][i]) = addr;
+    table->src[bucket][i] = addr;
     table->size[bucket][i] = size;
     LCG_PRINTF("Setting stuff val %u --> %x with size %u,addr %x\r\n",
                                       *((uint16_t *)value),
@@ -108,7 +108,7 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
  */
 uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
   uint16_t new_ptr;
-  size_t extra = 0;
+  uint16_t extra = 0;
   if(*buf_cap + size > BUF_LEN) {
     printf("Maxed len %u + %u > %u\r\n",*buf_cap, size, BUF_LEN);
     return 0xFFFF;
@@ -121,20 +121,21 @@ uint16_t alloc(uint8_t *buf, uint16_t *buf_cap, void * addr, size_t size) {
   }
   // TODO make more general
   // Fix alignment struggles
-  if(size == 2) {
-    while(new_ptr & 0x1) {
-      new_ptr++;
-      extra++;
-    }
+  if((new_ptr & 0x1) && size == 2) {
+    // Shift is just 1 byte if we have a 2 byte word and the pointer is
+    // currently pointing at an odd address
+    extra = 1;
+    LCG_PRINTF("2: new_ptr = %x, extra = %u\r\n",new_ptr, extra);
   }
-  if(size == 4) {
-    while(new_ptr & 0x11) {
-      new_ptr++;
-      extra++;
-    }
+  else if((new_ptr & 0x3) && size == 4) {
+    // Need to figure out what the difference between the current pointer
+    // location and the next one divisible by 4 is.
+    extra =  4 - (new_ptr & 0x3);
+    LCG_PRINTF("4: new_ptr = %x, extra = %u\r\n",new_ptr, extra);
   }
   // If we're out of space, throw an error
-  if(new_ptr + size > (unsigned) (buf + BUF_LEN)) {
+  if(extra + *buf_cap + size > BUF_LEN) {
+      printf("%u %u %u > %u , so fail!\r\n", extra, *buf_cap, size, BUF_LEN);
       return 0xFFFF;
   }
   /*

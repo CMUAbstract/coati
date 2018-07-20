@@ -16,6 +16,7 @@
 #include "event.h"
 #include "types.h"
 #include "hash.h"
+#include "undo.h"
 
 #ifdef LIBCOATIGCC_TEST_TIMING
 #pragma message "setup timing test"
@@ -123,12 +124,18 @@ void tsk_commit_ph2() {
     // Walk through each slot in each bin w/ at least one value slotted in
     while(tsk_table.bucket_len[bin] > 0) {
       slot = tsk_table.bucket_len[bin] - 1;
-      LCG_PRINTF("Bucket %u slot %u\r\n",bin, slot);
       // Copy from dst in tsk buf to "home" for that variable
-      memcpy( tsk_table.src[bin][slot],
+      uint16_t shift = (bin << LOG_BIN_LEN_PLUS) + slot;
+      // TODO take this out
+      LCG_PRINTF("Shift = %u = %u << %u + %u\r\n",shift, bin, LOG_BIN_LEN_PLUS, slot);
+      memcpy( *((void ***)tsk_table.src + shift),
+              *((void ***)tsk_table.dst + shift),
+              *((void ***)tsk_table.size + shift)
+            );
+      /*memcpy( tsk_table.src[bin][slot],
               tsk_table.dst[bin][slot],
               tsk_table.size[bin][slot]
-            );
+            );*/
       LCG_PRINTF("Inserted %x to %x val = %x\r\n",
                                 *((uint16_t *)tsk_table.dst[bin][slot]),
                                 (uint16_t)tsk_table.src[bin][slot],
@@ -801,10 +808,15 @@ int main() {
     // an event or not
     _init();
     _numBoots++;
+    // TODO take this out
+    __delay_cycles(4000000);
+    printf("Go!\r\n");
     #ifdef LIBCOATIGCC_ENABLE_DIAGNOSTICS
     __delay_cycles(4000000);
     #endif
     LCG_PRINTF("main commit state: %x\r\n",curctx->commit_state);
+    // Restore undo log
+    restore_log();
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL
     // Check if we're in an event
