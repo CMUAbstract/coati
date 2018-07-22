@@ -23,7 +23,7 @@
 #include "event.h"
 #include "undo.h"
 
-__nv uint8_t tx_buf[BUF_SIZE];
+__nv uint8_t tx_buf[BUF_LEN];
 __nv uint16_t tx_buf_level = 0;
 __nv table_t tx_table;
 
