@@ -15,7 +15,7 @@
 #include "tx.h"
 #include "event.h"
 #include "types.h"
-#include "undo.h"
+#include "filter.h"
 
 #ifdef LIBCOATIGCC_TEST_TIMING
 #pragma message "setup timing test"
@@ -245,7 +245,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 // that are possible.
                 test = check_list(ev_read_list, read_cnt, addr);
                 if(!test) {
-                  printf("Out of space in ev read list!\r\n");
+                  printf("Error ev read list!\r\n");
                   while(1);
                 }
               }
@@ -305,7 +305,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                 int test = 0;
                 test = check_list(tx_read_list, read_cnt, addr);
                 if(!test) {
-                  printf("Out of space in tx read list!\r\n");
+                  printf("Error tx read list!\r\n");
                   while(1);
                 }
               }
@@ -320,7 +320,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
                   printf("Seen before!\r\n");
                 }*/
                 if(!test && (read_cnt >= TX_NUM_DIRTY_ENTRIES)) {
-                  printf("Really out of space in tx read list\r\n");
+                  printf("Double error tx read list\r\n");
                   while(1);
                 }
                 if(!test) {
@@ -356,7 +356,7 @@ void * read(const void *addr, unsigned size, acc_type acc) {
             }
             break;
         default:
-            printf("No valid type for read!\r\n");
+            printf("No type!\r\n");
             // Error!
             while(1);
     }
@@ -466,7 +466,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               write_cnt = ((tx_state *)curctx->extra_state)->num_write;
               write_cnt += num_txwrite;
               #ifndef LIBCOATIGCC_CHECK_ALL_TX
-              if(write_cnt >= NUM_DIRTY_ENTRIES) {
+              if(write_cnt >= TX_NUM_DIRTY_ENTRIES) {
                 int test = 0;
                 test = check_list(tx_write_list, write_cnt, addr);
                 if(!test) {
@@ -481,15 +481,15 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               #else
                 int test = 0;
                 test = check_list(tx_write_list,write_cnt,addr);
-                if(!test && (write_cnt >= NUM_DIRTY_ENTRIES)) {
-                  printf("Really out of space in tx write %u\r\n", addr);
+                if(!test && (write_cnt >= TX_BUF_SIZE)) {
+                  printf("Really out of space in tx write %x\r\n", addr);
                   while(1);
                 }
                 if(!test) {
                   tx_write_list[write_cnt] = (void *) addr;
                   num_txwrite++;
                 }
-            
+
             #endif // CHECK_ALL_TX
             }
             #endif // BUFFER_ALL
@@ -995,8 +995,6 @@ int main() {
     #pragma message ("Delaying for def test")
     //__delay_cycles(4000000);
     #endif
-    // Restore log if there's anything in it
-    restore_log();
     // Resume execution at the last task that started but did not finish
     #ifdef LIBCOATIGCC_BUFFER_ALL
     // Check if we're in an event

@@ -29,8 +29,13 @@ __nv void * tx_dst[TX_NUM_DIRTY_ENTRIES];
 __nv size_t tx_size[TX_NUM_DIRTY_ENTRIES];
 
 #ifdef LIBCOATIGCC_BUFFER_ALL
-__nv void * tx_read_list[TX_BUF_SIZE];
-__nv void * tx_write_list[TX_BUF_SIZE];
+// TODO fix this shameless hack on tx red
+#ifdef SERIALIZE_BOTH
+__nv void * tx_read_list[TX_NUM_DIRTY_ENTRIES];
+#else
+__nv void *tx_read_list[1];
+#endif
+__nv void * tx_write_list[TX_NUM_DIRTY_ENTRIES];
 
 // volatile number of reads the transaction has performed
 volatile uint16_t num_txread = 0;
@@ -162,7 +167,7 @@ void tsk_in_tx_commit_ph2() {
       void *dst_alloc = tx_buf_alloc(tsk_src[num_dtv -1],
                                      tsk_size[num_dtv -1]);
       if(dst_alloc == NULL) {
-        printf("Error allocating to tx buff\r\n");
+        printf("Error alloc tx buff %u", TX_BUF_SIZE);
         while(1);
       }
         //LCG_PRINTF("Copying from %x to %x, %x bytes \r\n",
@@ -191,8 +196,6 @@ void tsk_in_tx_commit_ph2() {
 void * tx_buf_alloc(void * addr, size_t size) {
   uint16_t new_ptr;
   uint16_t index = ((tx_state *)curctx->extra_state)->num_dtxv;
-  //TODO take this out
-  //uint16_t inc = 0;
   if(index) {
     new_ptr = (uint16_t) tx_dst[index - 1] +
     tx_size[index - 1];
@@ -201,17 +204,12 @@ void * tx_buf_alloc(void * addr, size_t size) {
     new_ptr = (uint16_t) tx_buf;
   }
   // Fix alignment struggles
-  if(size == 2) {
-    while(new_ptr & 0x1) {
+  if((new_ptr & 0x1) && size == 2) {
       new_ptr++;
-      //inc++;
-    }
   }
-  if(size == 4) {
-    while(new_ptr & 0x11) {
-      new_ptr++;
-      //inc++;
-    }
+  if((new_ptr & 0x3) && size == 4) {
+    // bump up to the next address that is happily divided by 4
+    new_ptr += (4 - (new_ptr & 0x3));
   }
   if(new_ptr + size > (unsigned) (tx_buf + TX_BUF_SIZE)) {
     return NULL;
@@ -222,8 +220,6 @@ void * tx_buf_alloc(void * addr, size_t size) {
     tx_size[index] = size;
     ((tx_state *)curctx->extra_state)->num_dtxv++;
   }
-  // TODO take this out
-  LCG_PRINTF("s = %u, inc = %ufill = %u\r\n",size,inc,(new_ptr - (unsigned) tx_buf));
   LCG_PRINTF("buf size = %u\r\n",TX_BUF_SIZE);
   return (void *) new_ptr;
 }

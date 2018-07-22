@@ -112,6 +112,20 @@ typedef struct _tx_state {
       write(&(x),sizeof(type),TX,_temp_loc);\
     }\
 
+// Only works for uint32_t's
+#define TX_4B_WRITE(x, val, type, is_ptr) \
+  { uint16_t _temp_loc1 = (val) >> 16;\
+    uint16_t _temp_loc = (val) &  0xFFFF;\
+    write((uint16_t *)(&(x)) + 1, 2, TX, _temp_loc1);\
+    write((uint16_t *)(&(x)) + 0, 2, TX, _temp_loc);\
+  }
+
+// Only works for uint32_t's
+#define TX_4B_READ(x, type) \
+(((uint32_t)*((uint16_t *)read((uint16_t *)(&(x)) + 1, 2, TX)) >> 16) + \
+  (*((uint16_t *)read((uint16_t *)(&(x)) + 0, 2, TX))))
+
+
 #ifdef LIBCOATIGCC_TEST_COUNT
 #define NI_TX_WRITE(x,val,type,is_ptr) \
     { instrument = 0; \

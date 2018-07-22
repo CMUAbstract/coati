@@ -580,6 +580,20 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
 #define READ(x,type) \
     *((type *)read(&(x),sizeof(type),NORMAL))
 
+
+// Only works for uint32_t's
+#define WRITE4B(x, val, type, is_ptr) \
+  { uint16_t _temp_loc1 = (val) >> 16;\
+    uint16_t _temp_loc = (val) &  0xFFFF;\
+    write((uint16_t *)(&(x)) + 1, 2, NORMAL, _temp_loc1);\
+    write((uint16_t *)(&(x)) + 0, 2, NORMAL, _temp_loc);\
+  }
+
+// Only works for uint32_t's
+#define READ4B(x, type) \
+(((uint32_t)*((uint16_t *)read((uint16_t *)(&(x)) + 1, 2, NORMAL)) >> 16) + \
+  (*((uint16_t *)read((uint16_t *)(&(x)) + 0, 2, NORMAL))))
+
 /**
  * @brief writes a value to x based on the size of the variable
  */

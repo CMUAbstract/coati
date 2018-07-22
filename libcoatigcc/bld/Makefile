@@ -10,7 +10,6 @@ OBJECTS += \
 	coati.o \
   tx.o \
   filter.o\
-  undo.o \
   event.o \
 
 
