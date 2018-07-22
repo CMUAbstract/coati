@@ -9,8 +9,8 @@
 #define THREAD 0
 #define EV  1
 #define NUM_PRIO_LEVELS 2
-#define EV_NUM_DIRTY_ENTRIES 10
-#define EV_BUF_SIZE 20
+#define EV_NUM_DIRTY_ENTRIES 20
+#define EV_BUF_SIZE 40
 typedef struct _ev_state {
     uint16_t num_devv;
 #ifdef LIBCOATIGCC_BUFFER_ALL
