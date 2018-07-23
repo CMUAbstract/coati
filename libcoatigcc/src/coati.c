@@ -806,8 +806,6 @@ int main() {
     // an event or not
     _init();
     _numBoots++;
-    // TODO take this out
-    __delay_cycles(4000000);
     //printf("Go!\r\n");
     #ifdef LIBCOATIGCC_ENABLE_DIAGNOSTICS
     __delay_cycles(4000000);
