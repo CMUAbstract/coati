@@ -351,13 +351,17 @@ void write(const void *addr, size_t size, acc_type acc, void *value) {
             }
             else {
                 void * dst = ev_buf_alloc(addr, size);
+                if(dst == NULL) {
+                  printf("Error writing to buf!\r\n");
+                  while(1);
+                }
                 memcpy(dst, value, size);
                 uint16_t num_vars = 0;
                 num_vars = ((ev_state *)curctx->extra_ev_state)->num_devv
                           + num_evbe;
 
               // Left here for future error checking
-              #if 0
+              #if 1
               if(dst > (ev_buf + BUF_SIZE) || dst < ev_buf) {
                 printf("Error! Invalid destination!\r\n");
               }

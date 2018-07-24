@@ -53,7 +53,9 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
   uint16_t temp;
   // Check for matching address in bucket
   // We should skip this if bucket_len == 0
-  while(i < table->bucket_len[bucket]) {
+  //while(i < table->bucket_len[bucket]) {
+  for(i = 0; i < table->bucket_len[bucket]; i++) {
+    // Leave early if we catch it
     if(table->src[bucket][i] == addr) {
       memcpy(table->dst[bucket][i], value, size);
       // we return here if we've found the value in the table
@@ -64,40 +66,40 @@ uint16_t add_to_table(table_t *table, uint8_t *dirty_buf, uint16_t *cap,
         printf("Error! size mismatch.\r\n");
       }
       #endif
-      break;
+      return 0;
     }
-    i++;
   }
   // add to bucket if not present
-  if(i == table->bucket_len[bucket]) {
-    if(i + 1 > BIN_LEN) {
-      printf("Error! overflowed bin! %u %u\r\n", i, table->bucket_len[bucket]);
-      return 1;
-    }
-    table->src[bucket][i] = addr;
-    table->size[bucket][i] = size;
-    LCG_PRINTF("Setting stuff val %u --> %x with size %u,addr %x\r\n",
-                                      *((uint16_t *)value),
-                                      ((uint16_t) (table->src[bucket][i])),
-                                      table->size[bucket][i],
-                                      (uint16_t)addr);
-    temp = alloc(dirty_buf, cap, addr, size);
-    if(temp == 0xFFFF) {
-      printf("Alloc failed! buf_level = %u\r\n",*cap);
-      return 1;
-    }
-    table->dst[bucket][i] = dirty_buf + temp;
-    table->bucket_len[bucket]++;
-    // Need to have this add down here so we persist this stuff correctly
-    memcpy(dirty_buf + temp, value, size);
-    LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
-    // Leaving here for future debugging
-    #if 0
-    if(table->dst[bucket][i] + size != dirty_buf + *cap) {
-      printf("Assumptions on sizing failed!\r\n");
-    }
-    #endif
+  //if(i == table->bucket_len[bucket]) {
+  // i now = last entry in bucket
+  if(i + 1 > BIN_LEN) {
+    printf("Error! overflowed bin! %u %u\r\n", i, table->bucket_len[bucket]);
+    return 1;
   }
+  table->src[bucket][i] = addr;
+  table->size[bucket][i] = size;
+  LCG_PRINTF("Setting stuff val %u --> %x with size %u,addr %x\r\n",
+                                    *((uint16_t *)value),
+                                    ((uint16_t) (table->src[bucket][i])),
+                                    table->size[bucket][i],
+                                    (uint16_t)addr);
+  temp = alloc(dirty_buf, cap, addr, size);
+  if(temp == 0xFFFF) {
+    printf("Alloc failed! buf_level = %u %x\r\n",*cap, cap);
+    return 1;
+  }
+  table->dst[bucket][i] = dirty_buf + temp;
+  table->bucket_len[bucket]++;
+  // Need to have this add down here so we persist this stuff correctly
+  memcpy(dirty_buf + temp, value, size);
+  LCG_PRINTF("New val: %u\r\n",*((uint16_t *)(table->dst[bucket][i])));
+  // Leaving here for future debugging
+  #if 0
+  if(table->dst[bucket][i] + size != dirty_buf + *cap) {
+    printf("Assumptions on sizing failed!\r\n");
+  }
+  #endif
+  //}
   LCG_PRINTF("final bucket len = %u\r\n",table->bucket_len[bucket]);
   LCG_PRINTF("New level = %u\r\n",*cap);
   return 0;
