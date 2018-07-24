@@ -6,8 +6,8 @@
 #define BIN_MASK 0xF
 #define BIN_LEN  16
 #define LOG_BIN_LEN_PLUS 4
-// BUF_LEN needs to equal 400 for cem
-#define BUF_LEN 250
+// BUF_LEN needs to equal 400 for cem, 400 for cuckoo, 250 is ok for rsa
+#define BUF_LEN 400
 #define HASH_ERROR 0xffff
 
 typedef struct table_ {
