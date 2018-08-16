@@ -15,14 +15,14 @@ CFLAGS += \
 	-I$(MEMENTOS_ROOT)/include \
 
 .DUMMY: all
-all: libcoatigcc.a
+all: coatigcc.a
 
 %.s: %.c
 	$(CC) $(CFLAGS) -S -o $@ $^
 
 #%.c: include/mementos.h
 
-libcoatigcc.a: libcoatigcc.o
+libcoatigcc.a: coatigcc.o
 	$(AR) r $@ $^
 
 clean:
