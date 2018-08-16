@@ -35,7 +35,7 @@ __nv void * tx_read_list[TX_NUM_DIRTY_ENTRIES];
 #else
 __nv void *tx_read_list[1];
 #endif
-__nv void * tx_write_list[TX_NUM_DIRTY_ENTRIES];
+__nv void * tx_write_list[TX_NUM_WRITE_ENTRIES];
 
 // volatile number of reads the transaction has performed
 volatile uint16_t num_txread = 0;

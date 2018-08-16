@@ -8,3 +8,51 @@ define the following flag when compiling libchain *and*
 the application:
 
     make LIBCHAIN_ENABLE_DIAGNOSTICS=1
+
+The following variables need to be configured to manage Coati's buffering
+protocol.
+
+These determine the different buffer sizes
+export LIBCOATIGCC_PER_TSK_BUF_SIZE = 300
+export LIBCOATIGCC_CTX_BUF_SIZE = 500
+
+export LIBCOATIGCC_TX_BUF_SIZE = 500
+export LIBCOATIGCC_PER_TX_DIRTY_ENTRIES = 500
+export LIBCOATIGCC_NUM_WRITE_ENTRIES = 3000
+
+These decide if we're using atomics and if the interrupt flag will be tracked in
+software (so we can count how many times it fires vs how many times we run the
+interrupt) or if it'll just be tracked in the ISR vector in the MCU's memory
+export LIBCOATIGCC_ENABLE_ATOMICS ?= 0
+export LIBCOATIGCC_ATOMICS_HW ?= 0
+
+These decide if we're using buffered or split phase serialization (when
+BUFFER_ALL = 1 we're in buffered, o/w we're in split phase) and if we are in
+buffered, CHECK_ALL_TX makes better use of our write list memory by checking
+through all of the addresses already in the buffer rather than just
+concatenating the new write to the end of the list (which can result in extra
+memory usage but is substantially faster).
+export LIBCOATIGCC_CHECK_ALL_TX ?= 0
+export LIBCOATIGCC_BUFFER_ALL ?= 1
+
+
+
+The following variables need to be configured if you want to do specific
+profiling on Coati apps
+# This group is 1 hot... do yourself a favor and don't set more than one.
+export LIBCOATIGCC_TIME_TEST ?= 0
+export LIBCOATIGCC_COUNT_TEST ?= 0
+export LIBCOATIGCC_TIME_EV ?= 0
+export LIBCOATIGCC_TIME_TX ?= 0
+export LIBCOATIGCC_HIST_SIZE ?= 0
+export LIBCOATIGCC_WAIT_TEST ?= 0
+
+# These aren't quite one-hot. You ened deferred count set to 1 and either ev or
+# tsk def count set... come to think of it, that may not qutie work for events
+# just yet, but if you set both you'll get everything, and if they're both 0
+# while deferred count is 1, you get just the tx def stuff if we're buffering
+# all
+export LIBCOATIGCC_DEFERRED_COUNT_TEST ?= 0
+export LIBCOATIGCC_TSK_DEF_COUNT ?= 0
+export LIBCOATIGCC_EV_DEF_COUNT ?= 0
+

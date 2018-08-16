@@ -466,11 +466,12 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               write_cnt = ((tx_state *)curctx->extra_state)->num_write;
               write_cnt += num_txwrite;
               #ifndef LIBCOATIGCC_CHECK_ALL_TX
-              if(write_cnt >= TX_NUM_DIRTY_ENTRIES) {
+              if(write_cnt >= TX_NUM_WRITE_ENTRIES) {
                 int test = 0;
                 test = check_list(tx_write_list, write_cnt, addr);
                 if(!test) {
-                  printf("Out of space in tx write list!\r\n");
+                  printf("Out of space in tx write list! %u\r\n",
+                  TX_NUM_WRITE_ENTRIES);
                   while(1);
                 }
               }

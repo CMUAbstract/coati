@@ -37,6 +37,12 @@
   #define TX_NUM_DIRTY_ENTRIES LIBCOATIGCC_PER_TX_DIRTY_ENTRIES
 #endif
 
+#ifndef LIBCOATIGCC_NUM_WRITE_ENTRIES
+  #define TX_NUM_WRITE_ENTRIES NUM_DIRTY_ENTRIES
+#else
+  #define TX_NUM_WRITE_ENTRIES LIBCOATIGCC_NUM_WRITE_ENTRIES
+#endif
+
 typedef void (task_func_t)(void);
 typedef uint32_t task_mask_t;
 typedef uint16_t field_mask_t;
