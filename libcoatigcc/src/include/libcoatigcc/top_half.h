@@ -32,6 +32,12 @@ extern task_t *__sleep_return_task;
 #define TH_WRITE_ARR(var,val,index) \
   _TH_PRIV_ ## var[((ev_state *)curctx->extra_ev_state)->count +1][index] = val
 
+// Note: this next primitive returns the address of the starting element of the
+// array- use with care!! Only write to this memory o/w you may end up with
+// inconsistent values.
+#define TH_ARR_ADDR(var) \
+  &(_TH_PRIV_ ## var[((ev_state *)curctx->extra_ev_state)->count +1][0])
+
 #define TH_VAR(var, type) \
   TH_VAR_INNER(var, type, NUM_WQ_ENTRIES)
 
