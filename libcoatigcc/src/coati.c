@@ -138,11 +138,13 @@ void tsk_commit_ph2() {
   LCG_PRINTF("commit_ph2, committing %u entries\r\n",num_dtv);
   while(num_dtv > 0)  {
     // Copy from dst in tsk buf to "home" for that variable
-    LCG_PRINTF("Copying to %x\r\n",tsk_src[num_dtv-1]);
+    LCG_PRINTF("Copying %u to %x\r\n",*((uint16_t *)tsk_dst[num_dtv - 1]),
+                                                  tsk_src[num_dtv-1]);
     memcpy( tsk_src[num_dtv - 1],
             tsk_dst[num_dtv - 1],
             tsk_size[num_dtv - 1]
           );
+    LCG_PRINTF("Copied val: %u\r\n",*((uint16_t *)tsk_src[num_dtv-1]));
     num_dtv--;
   }
 }
@@ -277,12 +279,13 @@ void * read(const void *addr, unsigned size, acc_type acc) {
         case NORMAL:
             index = tsk_find(addr);
             if(index > -1) {
-                LCG_PRINTF("Found addr %x at buf dst %x\r\n",
-                            addr,tsk_dst[index]);
+                LCG_PRINTF("Found addr %x at buf dst %x val %u\r\n",
+                            addr,tsk_dst[index],*((uint16_t *)tsk_dst[index]));
                 dst = (void *) tsk_dst[index];
             }
             else {
-                LCG_PRINTF("Addr %x not in buffer \r\n", addr);
+                LCG_PRINTF("Addr %x not in buffer, val %u \r\n", addr,
+                  *((uint16_t*)addr));
                 dst = (void *) addr;
             }
             break;
@@ -371,6 +374,38 @@ void * read(const void *addr, unsigned size, acc_type acc) {
     }
     #endif // TEST_COUNT
     return dst;
+}
+
+/*
+ * @brief: prototype function re-jiggered to handle floats
+ */
+
+void test_write(const void *addr, unsigned size, char value[4]) {
+  int index;
+  uint16_t write_cnt;
+  index = tsk_find(addr);
+  #if defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_BUFFER_ALL)
+    #error test_write func undef for test_count or buffer_all
+  #endif
+  if(index > -1) {
+      memcpy(tsk_dst[index],value,size);
+      LCG_PRINTF("Handling object test %u vs %u\r\n", *((float *)value) > 3.0,
+                    *((float *)tsk_dst[index]) > 3.0);
+  }
+  else {
+      void * dst = tsk_buf_alloc(addr, size);
+      if(dst != NULL) {
+        memcpy(dst,value,size);
+        LCG_PRINTF("Handling object test %u vs %u\r\n",*((float *)value) > 3.0,
+        *((float *)dst) > 3.0);
+      }
+      else {
+          // Error! we ran out of space
+          printf("Error! out of space!\r\n");
+          while(1);
+      }
+  }
+  return;
 }
 
 
@@ -499,7 +534,10 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
         case NORMAL:
             index = tsk_find(addr);
             if(index > -1) {
-              if (size == sizeof(char)) {
+                memcpy(tsk_dst[index],&value,size);
+                printf("Handling object test %u vs %u\r\n", (float)value > 3.0,
+                              *((float *)tsk_dst[index]) > 3.0);
+              /*if (size == sizeof(char)) {
                 *((uint8_t *) tsk_dst[index]) = (uint8_t) value;
               } else if (size == sizeof(uint16_t)) {
                 *((unsigned *) tsk_dst[index]) = (uint16_t) value;
@@ -509,22 +547,26 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
               } else {
                     printf("Error! invalid size!\r\n");
                     while(1);
-              }
+              } */
             }
             else {
                 void * dst = tsk_buf_alloc(addr, size);
                 if(dst != NULL) {
-                  if (size == sizeof(char)) {
+                  memcpy(dst,&value,size);
+                  printf("Handling object test %u vs %u\r\n",(float)value > 3.0,
+                  *((float *)dst) > 3.0);
+                  /*if (size == sizeof(char)) {
                     *((uint8_t *) dst) = (uint8_t) value;
                   } else if (size == sizeof(uint16_t)) {
                     *((unsigned *) dst) = (uint16_t) value;
                     //printf("Wrote %x\r\n",*((uint16_t *)dst));
                   } else if (size == sizeof(uint32_t)) {
                     *((uint32_t *) dst) = (uint32_t) value;
+                    printf("Handling 4B object %u\r\n",*((uint16_t *)dst));
                   } else {
                     printf("Error! invalid size!\r\n");
                     while(1);
-                  }
+                  }*/
                 }
                 else {
                     // Error! we ran out of space

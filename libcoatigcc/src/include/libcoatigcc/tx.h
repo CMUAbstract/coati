@@ -106,6 +106,11 @@ typedef struct _tx_state {
 #define TX_READ(x,type) \
     *((type *)read(&(x),sizeof(type),TX))
 
+#define TX_TEST_WRITE(x,val,type,is_ptr) \
+    { char _temp_loc[4];\
+      memcpy(_temp_loc, &val, sizeof(type));\
+      test_write(&(x),sizeof(type),_temp_loc);\
+    }
 
 #define TX_WRITE(x, val,type,is_ptr) \
     { type _temp_loc = val;\

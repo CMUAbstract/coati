@@ -578,6 +578,7 @@ extern unsigned wait_count;
 
 void * read(const void * addr, unsigned size, acc_type acc);
 void  write(const void *addr, unsigned size, acc_type acc, uint32_t value);
+void  test_write(const void *addr, unsigned size, char value[4]);
 void *internal_memcpy(void *dest, void *src, uint16_t num);
 
 /**
@@ -606,6 +607,12 @@ void *internal_memcpy(void *dest, void *src, uint16_t num);
 #define WRITE(x,val,type,is_ptr) \
     { type _temp_loc = val;\
       write(&(x),sizeof(type),NORMAL,_temp_loc);\
+    }
+
+#define TEST_WRITE(x,val, type, is_ptr) \
+    { char _temp_loc[4];\
+      memcpy(_temp_loc, &val, sizeof(type));\
+      test_write(&(x),sizeof(type),_temp_loc);\
     }
 /**
  * @brief extra key words mostly for instrumentation
