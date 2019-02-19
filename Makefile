@@ -1,7 +1,24 @@
-LLVM_DIR = LLVM
+LIB = libcoatigcc
 
-ifneq ($(COATI_DEBUG_LOG),)
-  CMAKE_VARS += -DDEBUG_LOG=$(COATI_DEBUG_LOG)
-endif
+export LIBCOATIGCC_ENABLE_DIAGNOSTICS = 0
+export LIBCOATIGCC_CONF_REPORT = 0
 
-include $(MAKER_ROOT)/Makefile.llvm
+OBJECTS += \
+  top_half.o \
+	coati.o \
+  tx.o \
+  filter.o\
+  event.o \
+
+
+DEPS += \
+  libmspware \
+	libmsp \
+
+override SRC_ROOT = ../../src
+
+override CFLAGS += \
+	-I$(SRC_ROOT)/include \
+	-I$(SRC_ROOT)/include/$(LIB) \
+
+include $(MAKER_ROOT)/Makefile.$(TOOLCHAIN)
