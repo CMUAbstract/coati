@@ -535,7 +535,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
             index = tsk_find(addr);
             if(index > -1) {
                 memcpy(tsk_dst[index],&value,size);
-                printf("Handling object test %u vs %u\r\n", (float)value > 3.0,
+                LCG_PRINTF("Handling object test %u vs %u\r\n", (float)value > 3.0,
                               *((float *)tsk_dst[index]) > 3.0);
               /*if (size == sizeof(char)) {
                 *((uint8_t *) tsk_dst[index]) = (uint8_t) value;
@@ -553,7 +553,7 @@ void write(const void *addr, unsigned size, acc_type acc, uint32_t value) {
                 void * dst = tsk_buf_alloc(addr, size);
                 if(dst != NULL) {
                   memcpy(dst,&value,size);
-                  printf("Handling object test %u vs %u\r\n",(float)value > 3.0,
+                  LCG_PRINTF("Handling object test %u vs %u\r\n",(float)value > 3.0,
                   *((float *)dst) > 3.0);
                   /*if (size == sizeof(char)) {
                     *((uint8_t *) dst) = (uint8_t) value;
