@@ -384,9 +384,9 @@ void test_write(const void *addr, unsigned size, char value[4]) {
   int index;
   uint16_t write_cnt;
   index = tsk_find(addr);
-  #if defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_BUFFER_ALL)
-    #error test_write func undef for test_count or buffer_all
-  #endif
+  //#if defined(LIBCOATIGCC_TEST_COUNT) || defined(LIBCOATIGCC_BUFFER_ALL)
+  //  #error test_write func undef for test_count or buffer_all
+  //#endif
   if(index > -1) {
       memcpy(tsk_dst[index],value,size);
       LCG_PRINTF("Handling object test %u vs %u\r\n", *((float *)value) > 3.0,

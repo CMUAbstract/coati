@@ -42,7 +42,7 @@ extern context_t *thread_ctx;
 extern task_t * cur_tx_start;
 extern void * ev_read_list[];
 extern void * ev_write_list[];
-void event_handler();
+void event_handler(context_t *new_event_ctx);
 #else
 extern context_t thread_ctx; 
 extern void queued_event_handoff();
