@@ -9,7 +9,7 @@ the application:
 
     make LIBCHAIN_ENABLE_DIAGNOSTICS=1
 
-The following variables need to be configured to manage Coati's buffering
+The following variables need to be configured to manage Buffi's buffering
 protocol.
 
 These determine the different buffer sizes
@@ -47,8 +47,8 @@ export LIBCOATIGCC_TIME_TX ?= 0
 export LIBCOATIGCC_HIST_SIZE ?= 0
 export LIBCOATIGCC_WAIT_TEST ?= 0
 
-# These aren't quite one-hot. You ened deferred count set to 1 and either ev or
-# tsk def count set... come to think of it, that may not qutie work for events
+# These aren't quite one-hot. You need deferred count set to 1 and either ev or
+# tsk def count set... come to think of it, that may not quite work for events
 # just yet, but if you set both you'll get everything, and if they're both 0
 # while deferred count is 1, you get just the tx def stuff if we're buffering
 # all
